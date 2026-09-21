@@ -3,8 +3,9 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View 
 
 import { useType } from '../design/fonts';
 import { Sheet } from '../design/Sheet';
-import { colors, radius, spacing } from '../design/theme';
-import { Button, fieldStyles } from '../design/ui';
+import { colors, radius, sizes, spacing, keyboardAppearance } from '../design/theme';
+import { useAccent } from '../design/accent';
+import { Button, Chip, fieldStyles, Segmented } from '../design/ui';
 import { pickPhotoFromCamera, pickPhotoFromLibrary, photosSupported } from './photos';
 import { addChecklist, addQuickNote, addRecipe, RECIPE_CATEGORIES, type NoteType, type RecipeCategory } from './store';
 
@@ -43,6 +44,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 function PhotoField({ uri, onChange }: { uri: string | null; onChange: (uri: string | null) => void }) {
   const type = useType();
+  const accent = useAccent();
   const [busy, setBusy] = useState(false);
 
   if (!photosSupported) {
@@ -72,7 +74,7 @@ function PhotoField({ uri, onChange }: { uri: string | null; onChange: (uri: str
           </Pressable>
         </View>
       ) : busy ? (
-        <ActivityIndicator color={colors.accent} />
+        <ActivityIndicator color={accent.accent} />
       ) : (
         <View style={styles.photoButtons}>
           <Button label="Camera" variant="secondary" small onPress={() => pick('camera')} />
@@ -85,6 +87,7 @@ function PhotoField({ uri, onChange }: { uri: string | null; onChange: (uri: str
 
 function FormBody({ onCancel, onSaved }: Omit<Props, 'visible'>) {
   const type = useType();
+  const accent = useAccent();
   const [noteType, setNoteType] = useState<NoteType>('quick');
 
   // Quick
@@ -135,24 +138,7 @@ function FormBody({ onCancel, onSaved }: Omit<Props, 'visible'>) {
       <Text style={[type.display, styles.heading]}>NEW NOTE</Text>
 
       <Field label="Type">
-        <View style={styles.segment} accessibilityRole="radiogroup">
-          {TYPES.map((option) => {
-            const selected = option.value === noteType;
-            return (
-              <Pressable
-                key={option.value}
-                style={[styles.segmentOption, selected && styles.segmentSelected]}
-                onPress={() => setNoteType(option.value)}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: selected }}
-                aria-checked={selected}
-                accessibilityLabel={option.label}
-              >
-                <Text style={[type.label, styles.segmentText, selected && styles.segmentTextSelected]}>{option.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <Segmented options={TYPES} value={noteType} onChange={setNoteType} />
         <Text style={type.mono}>{TYPES.find((t) => t.value === noteType)!.hint}</Text>
       </Field>
 
@@ -164,7 +150,7 @@ function FormBody({ onCancel, onSaved }: Omit<Props, 'visible'>) {
             onChangeText={setText}
             placeholder="What are you thinking about or curious about right now?"
             placeholderTextColor={colors.textMuted}
-            keyboardAppearance="dark"
+            keyboardAppearance={keyboardAppearance}
             multiline
             textAlignVertical="top"
             autoFocus
@@ -180,7 +166,7 @@ function FormBody({ onCancel, onSaved }: Omit<Props, 'visible'>) {
               onChangeText={setChecklistTitle}
               placeholder="e.g. Packing list"
               placeholderTextColor={colors.textMuted}
-              keyboardAppearance="dark"
+              keyboardAppearance={keyboardAppearance}
               autoFocus
               accessibilityLabel="Checklist title"
             />
@@ -192,7 +178,7 @@ function FormBody({ onCancel, onSaved }: Omit<Props, 'visible'>) {
               onChangeText={setItems}
               placeholder={'Passport\nCharger\nToothbrush'}
               placeholderTextColor={colors.textMuted}
-              keyboardAppearance="dark"
+              keyboardAppearance={keyboardAppearance}
               multiline
               textAlignVertical="top"
               accessibilityLabel="Checklist items"
@@ -208,7 +194,7 @@ function FormBody({ onCancel, onSaved }: Omit<Props, 'visible'>) {
               onChangeText={setRecipeTitle}
               placeholder="e.g. Weeknight pasta"
               placeholderTextColor={colors.textMuted}
-              keyboardAppearance="dark"
+              keyboardAppearance={keyboardAppearance}
               autoFocus
               accessibilityLabel="Recipe title"
             />
@@ -221,27 +207,20 @@ function FormBody({ onCancel, onSaved }: Omit<Props, 'visible'>) {
               onChangeText={setCookTime}
               placeholder="e.g. 30 min"
               placeholderTextColor={colors.textMuted}
-              keyboardAppearance="dark"
+              keyboardAppearance={keyboardAppearance}
               accessibilityLabel="Cook time"
             />
           </Field>
           <Field label="Category">
             <View style={styles.choiceWrap} accessibilityRole="radiogroup">
-              {RECIPE_CATEGORIES.map((option) => {
-                const selected = category === option;
-                return (
-                  <Pressable
-                    key={option}
-                    style={[styles.choice, selected && styles.choiceSelected]}
-                    onPress={() => setCategory(option)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: selected }}
-                    accessibilityLabel={option}
-                  >
-                    <Text style={[type.label, selected && styles.choiceTextSelected]}>{option}</Text>
-                  </Pressable>
-                );
-              })}
+              {RECIPE_CATEGORIES.map((option) => (
+                <Chip
+                  key={option}
+                  label={option}
+                  selected={category === option}
+                  onPress={() => setCategory(option)}
+                />
+              ))}
             </View>
           </Field>
           <Field label="Rating">
@@ -255,9 +234,9 @@ function FormBody({ onCancel, onSaved }: Omit<Props, 'visible'>) {
                     accessibilityRole="radio"
                     accessibilityState={{ checked: selected }}
                     accessibilityLabel={`${value} star${value === 1 ? '' : 's'}`}
-                    style={[styles.starButton, selected && styles.starSelected]}
+                    style={[styles.starButton, selected && { backgroundColor: colors.surface2, borderColor: accent.accent }]}
                   >
-                    <Text style={[styles.star, selected && styles.starActive]}>★</Text>
+                    <Text style={[styles.star, selected && { color: accent.accent }]}>★</Text>
                   </Pressable>
                 );
               })}
@@ -270,7 +249,7 @@ function FormBody({ onCancel, onSaved }: Omit<Props, 'visible'>) {
               onChangeText={setIngredients}
               placeholder={'200g flour\n2 eggs\nPinch of salt'}
               placeholderTextColor={colors.textMuted}
-              keyboardAppearance="dark"
+              keyboardAppearance={keyboardAppearance}
               multiline
               textAlignVertical="top"
               accessibilityLabel="Ingredients"
@@ -283,7 +262,7 @@ function FormBody({ onCancel, onSaved }: Omit<Props, 'visible'>) {
               onChangeText={setSteps}
               placeholder={'Boil water\nCook pasta 9 minutes\nToss with sauce'}
               placeholderTextColor={colors.textMuted}
-              keyboardAppearance="dark"
+              keyboardAppearance={keyboardAppearance}
               multiline
               textAlignVertical="top"
               accessibilityLabel="Steps"
@@ -296,7 +275,7 @@ function FormBody({ onCancel, onSaved }: Omit<Props, 'visible'>) {
               onChangeText={setRecipeNotes}
               placeholder="Cook time, servings, where it's from..."
               placeholderTextColor={colors.textMuted}
-              keyboardAppearance="dark"
+              keyboardAppearance={keyboardAppearance}
               accessibilityLabel="Recipe notes"
             />
           </Field>
@@ -313,34 +292,25 @@ function FormBody({ onCancel, onSaved }: Omit<Props, 'visible'>) {
 
 const styles = StyleSheet.create({
   heading: { fontSize: 34, lineHeight: 38, letterSpacing: 1 },
-  field: { gap: 6 },
-  segment: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.control,
-    padding: 3,
-  },
-  segmentOption: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: radius.control - 2 },
-  segmentSelected: { backgroundColor: colors.accent },
-  segmentText: { fontSize: 10 },
-  segmentTextSelected: { color: colors.onAccent },
-  textArea: { minHeight: 120, paddingTop: 10, paddingBottom: 10 },
-  textAreaSmall: { minHeight: 80, paddingTop: 10, paddingBottom: 10 },
+  field: { gap: spacing.sm },
+  textArea: { minHeight: 120, paddingTop: spacing.md, paddingBottom: spacing.md },
+  textAreaSmall: { minHeight: 80, paddingTop: spacing.md, paddingBottom: spacing.md },
   muted: { color: colors.textMuted },
   photoButtons: { flexDirection: 'row', gap: spacing.sm },
   photoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   photoPreview: { width: 64, height: 64, borderRadius: radius.control, backgroundColor: colors.surface2 },
   removeText: { color: colors.accentStrong },
-  choiceWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  choice: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: radius.control, borderWidth: 1, borderColor: colors.border },
-  choiceSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
-  choiceTextSelected: { color: colors.onAccent },
+  choiceWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   ratingRow: { flexDirection: 'row', gap: 8 },
-  starButton: { width: 42, height: 38, borderRadius: radius.control, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-  starSelected: { backgroundColor: colors.surface2, borderColor: colors.accent },
+  starButton: {
+    width: sizes.control,
+    height: sizes.controlSm,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   star: { color: colors.textMuted, fontSize: 22 },
-  starActive: { color: colors.accent },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.xs },
 });

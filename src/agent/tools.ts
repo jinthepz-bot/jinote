@@ -87,11 +87,13 @@ export const COACH_TOOL_SPECS: ToolSpec[] = [
     name: 'log_progress',
     description:
       "Log progress toward a goal. Use it when the user says they did something countable (\"did 24 push-ups\", " +
-      '"saved 50 today"). For a best-result goal this replaces today\'s entry and only raises the record if it is ' +
-      'higher; for a cumulative goal it adds to the total.',
+      '"log 15 more", "saved 50 today"). For a best-result goal, each call adds a new set for today rather than ' +
+      "replacing one — pass just this set's size (CURRENT STATE shows today's sets already logged, if any), and " +
+      "the goal's overall record only rises if this single set beats it. For a cumulative goal the value is added " +
+      'to the running total, same as before.',
     properties: {
       goal_id: { type: 'string', description: 'Exact goal id from CURRENT STATE.' },
-      value: { type: 'number', description: 'How much, as a positive number.' },
+      value: { type: 'number', description: "This set's (or this addition's) size, as a positive number — not a running total." },
       note: { type: 'string', description: "Optional short note in the user's words." },
     },
     required: ['goal_id', 'value'],

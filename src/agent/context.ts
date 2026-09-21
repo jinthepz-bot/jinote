@@ -1,7 +1,7 @@
 import { addDays, formatDayKey } from '../coach/days';
 import { formatAmount } from '../coach/format';
 import { currentStreak, deadlineStatus, goalProgress } from '../coach/stats';
-import { entriesForGoal, getFeaturedGoal, type CoachState, type Goal } from '../coach/store';
+import { entriesForGoal, getFeaturedGoal, type CoachState, type Goal, type LogEntry } from '../coach/store';
 import { formatTime } from '../coach/days';
 import type { Note } from '../notes/store';
 import { describeEventTime } from '../schedule/format';
@@ -32,6 +32,22 @@ function describeGoal(goal: Goal, todayKey: string): string {
     `- "${goal.title}" (id: ${goal.id}, ${kind}): ${formatAmount(goal.current)} / ${formatAmount(goal.target)}${unit}` +
     ` (${percent}%${done ? ', reached' : ''}), ${describeDeadline(goal, todayKey)}`
   );
+}
+
+// For a best-result goal, each entry is its own set today, so they're listed out —
+// the model needs to see them to know "log 15 more" means a fourth set, not a
+// replacement. A cumulative goal just gets today's running total.
+function describeLoggedToday(goal: Goal, todayEntries: LogEntry[]): string {
+  if (todayEntries.length === 0) return 'Nothing logged today yet.';
+  const unit = goal.unit ? ` ${goal.unit}` : '';
+  const total = todayEntries.reduce((sum, e) => sum + e.value, 0);
+  if (goal.type !== 'best') {
+    const note = todayEntries[0]?.note;
+    return `Logged today: ${formatAmount(total)}${unit}${note ? ` (note: ${truncate(note, 80)})` : ''}.`;
+  }
+  const sets = todayEntries.map((e) => formatAmount(e.value)).join(', ');
+  return `Logged today: ${todayEntries.length} ${todayEntries.length === 1 ? 'set' : 'sets'} — ${sets}` +
+    ` (total ${formatAmount(total)}${unit}).`;
 }
 
 function describeTask(task: { id: string; text: string; date: string | null; time: string | null }, todayKey: string): string {
@@ -78,12 +94,8 @@ export function buildCoachContext(state: CoachState, notes: Note[], schedule: Sc
       `Best ${featured.unit || 'result'} ever: ${formatAmount(featured.current)}.`,
   ];
 
-  const todayEntry = entriesForGoal(state, featured.id).find((e) => e.date === todayKey);
-  lines.push(
-    todayEntry
-      ? `Logged today: ${formatAmount(todayEntry.value)}${featured.unit ? ` ${featured.unit}` : ''}${todayEntry.note ? ` (note: ${truncate(todayEntry.note, 80)})` : ''}.`
-      : 'Nothing logged today yet.',
-  );
+  const todayEntries = entriesForGoal(state, featured.id).filter((e) => e.date === todayKey);
+  lines.push(describeLoggedToday(featured, todayEntries));
 
   const tomorrowKey = addDays(todayKey, 1);
   const todaySchedule = eventsOnDay(schedule, todayKey);

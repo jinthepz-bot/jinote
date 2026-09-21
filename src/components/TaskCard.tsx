@@ -2,8 +2,9 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
-import { colors, radius } from '../design/theme';
+import { colors, radius, spacing } from '../design/theme';
 import { Card } from '../design/ui';
 import type { StepStatus, TaskMessage } from '../types';
 import { ActionChips } from './ActionChips';
@@ -28,8 +29,9 @@ function statusLabel(task: TaskMessage): string {
 
 function StepIcon({ status }: { status: StepStatus }) {
   const type = useType();
+  const accent = useAccent();
   if (status === 'running') {
-    return <ActivityIndicator size="small" color={colors.accent} style={styles.icon} />;
+    return <ActivityIndicator size="small" color={accent.accent} style={styles.icon} />;
   }
   if (status === 'done' || status === 'error') {
     return (
@@ -48,6 +50,7 @@ function StepIcon({ status }: { status: StepStatus }) {
 
 export function TaskCard({ task }: { task: TaskMessage }) {
   const type = useType();
+  const accent = useAccent();
   const [expanded, setExpanded] = useState<number | null>(null);
   const done = task.steps.filter((s) => s.status === 'done').length;
   const active = task.status === 'running' || task.status === 'reporting';
@@ -57,7 +60,7 @@ export function TaskCard({ task }: { task: TaskMessage }) {
       : task.status === 'error'
         ? colors.accentStrong
         : active
-          ? colors.accent
+          ? accent.accent
           : colors.textMuted;
 
   return (
@@ -69,7 +72,7 @@ export function TaskCard({ task }: { task: TaskMessage }) {
       <Text style={[type.bodyStrong, styles.title]}>{task.title}</Text>
 
       <View style={styles.track}>
-        <View style={[styles.fill, { width: `${(done / task.steps.length) * 100}%` }]} />
+        <View style={[styles.fill, { width: `${(done / task.steps.length) * 100}%`, backgroundColor: accent.accent }]} />
       </View>
 
       {task.steps.map((step, i) => {
@@ -115,8 +118,8 @@ export function TaskCard({ task }: { task: TaskMessage }) {
 
       {task.status === 'reporting' ? (
         <View style={styles.reporting}>
-          <ActivityIndicator size="small" color={colors.accent} />
-          <Text style={[type.label, styles.reportingText]}>Writing final report...</Text>
+          <ActivityIndicator size="small" color={accent.accent} />
+          <Text style={[type.label, { color: accent.accent }]}>Writing final report...</Text>
         </View>
       ) : null}
 
@@ -137,7 +140,7 @@ export function TaskCard({ task }: { task: TaskMessage }) {
 const styles = StyleSheet.create({
   card: { alignSelf: 'stretch', marginVertical: 6 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { fontSize: 17, lineHeight: 23, marginTop: 6 },
+  title: { fontSize: 17, lineHeight: 23, marginTop: spacing.sm },
   track: {
     height: 10,
     borderRadius: 5,
@@ -147,8 +150,8 @@ const styles = StyleSheet.create({
     marginVertical: 12,
     overflow: 'hidden',
   },
-  fill: { height: '100%', backgroundColor: colors.accent },
-  step: { paddingVertical: 6 },
+  fill: { height: '100%' },
+  step: { paddingVertical: spacing.sm },
   stepRow: { flexDirection: 'row', alignItems: 'center' },
   icon: { width: 22, marginRight: 8, alignItems: 'center' },
   glyph: { fontSize: 15, textAlign: 'center' },
@@ -156,7 +159,7 @@ const styles = StyleSheet.create({
   pendingText: { color: colors.textMuted },
   changeCount: { fontSize: 11, color: colors.success, marginLeft: 8 },
   chevron: { color: colors.textMuted, marginLeft: 8 },
-  stepDetail: { marginTop: 6, marginLeft: 30, gap: 6 },
+  stepDetail: { marginTop: spacing.sm, marginLeft: 30, gap: spacing.sm },
   stepOutput: {
     fontSize: 14,
     lineHeight: 20,
@@ -164,26 +167,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.control,
-    padding: 10,
+    padding: spacing.md,
   },
   taskChips: { marginTop: 8 },
-  reporting: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
-  reportingText: { color: colors.accent },
+  reporting: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.md },
   result: {
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    gap: 6,
+    gap: spacing.sm,
   },
   error: {
-    marginTop: 10,
+    marginTop: spacing.md,
     fontSize: 14,
     backgroundColor: colors.accentStrongSoft,
     borderWidth: 1,
     borderColor: colors.accentStrong,
     borderRadius: radius.control,
-    padding: 10,
+    padding: spacing.md,
     overflow: 'hidden',
   },
 });

@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useType } from '../design/fonts';
-import { colors } from '../design/theme';
+import { colors, spacing } from '../design/theme';
 import { describeEventTime } from './format';
 import type { ScheduleEvent } from './store';
 
@@ -32,7 +32,7 @@ export function EventRow({ event, onPress }: { event: ScheduleEvent; onPress: ()
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 10, paddingVertical: 8 },
+  row: { flexDirection: 'row', gap: spacing.md, paddingVertical: 8 },
   pressed: { opacity: 0.6 },
   time: { width: 44, color: colors.text, paddingTop: 2 },
   body: { flex: 1, gap: 1 },

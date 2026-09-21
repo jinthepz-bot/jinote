@@ -3,8 +3,9 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { daysInMonth, formatDayKey, makeDayKey, MONTH_NAMES, parseDayKey, weekdayIndex } from '../coach/days';
+import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
-import { colors } from '../design/theme';
+import { colors, spacing } from '../design/theme';
 
 const WEEK_HEADER = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -23,6 +24,7 @@ interface Props {
 // Android, and web. Days before today can't be picked.
 export function MonthCalendar({ selected, onSelect, todayKey }: Props) {
   const type = useType();
+  const accent = useAccent();
   const [view, setView] = useState(() => monthOf(selected ?? todayKey));
 
   const current = monthOf(todayKey);
@@ -82,8 +84,16 @@ export function MonthCalendar({ selected, onSelect, todayKey }: Props) {
               accessibilityLabel={formatDayKey(key, todayKey)}
               accessibilityState={{ selected: isSelected, disabled: past }}
             >
-              <View style={[styles.day, isToday && styles.today, isSelected && styles.selected]}>
-                <Text style={[type.mono, styles.dayText, past && styles.pastText, isSelected && styles.selectedText]}>
+              <View
+                style={[
+                  styles.day,
+                  isToday && [styles.today, { borderColor: accent.accent }],
+                  isSelected && { backgroundColor: accent.accent, borderColor: accent.accent },
+                ]}
+              >
+                <Text
+                  style={[type.mono, styles.dayText, past && styles.pastText, isSelected && { color: accent.onAccent }]}
+                >
                   {Number(key.slice(8))}
                 </Text>
               </View>
@@ -100,13 +110,13 @@ const styles = StyleSheet.create({
   monthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   monthTitle: { fontSize: 28, lineHeight: 32, letterSpacing: 1 },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  headCell: { width: `${100 / 7}%`, textAlign: 'center', paddingVertical: 6, letterSpacing: 0 },
+  headCell: { width: `${100 / 7}%`, textAlign: 'center', paddingVertical: spacing.sm, letterSpacing: 0 },
   cell: { width: `${100 / 7}%`, height: 42, alignItems: 'center', justifyContent: 'center' },
   day: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  today: { borderWidth: 1, borderColor: colors.accent },
-  selected: { backgroundColor: colors.accent, borderColor: colors.accent },
+  today: { borderWidth: 1 },
+  selected: { borderWidth: 1 },
   dayText: { fontSize: 14, color: colors.text },
   pastText: { color: colors.border },
-  selectedText: { color: colors.onAccent },
+
   disabled: { opacity: 0.35 },
 });

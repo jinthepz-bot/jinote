@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { AccentProvider } from './src/design/accent';
 import { FontProvider } from './src/design/fonts';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { NotificationsEngine } from './src/notifications/NotificationsEngine';
@@ -15,8 +16,10 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <FontProvider>
-        <RootNavigator />
-        <NotificationsEngine />
+        <AccentProvider>
+          <RootNavigator />
+          <NotificationsEngine />
+        </AccentProvider>
       </FontProvider>
     </SafeAreaProvider>
   );

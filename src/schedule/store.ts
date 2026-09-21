@@ -122,6 +122,11 @@ const store = createPersistedStore<ScheduleState>({
 });
 
 export const scheduleReady = store.ready;
+
+// Replaces everything from a backup file, through the same validation as a load.
+export function importSchedule(raw: unknown) {
+  store.set(normalize(raw));
+}
 export const getScheduleState = store.get;
 export const useSchedule = () => store.useStore();
 

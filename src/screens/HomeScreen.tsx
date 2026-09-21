@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatDayKey } from '../coach/days';
@@ -11,17 +11,17 @@ import {
   entriesForGoal,
   getFeaturedGoal,
   logProgress,
-  resetCoachData,
   setGoalDeadline,
   toggleTask,
   updateTask,
   useCoach,
 } from '../coach/store';
 import { useTodayKey } from '../coach/useTodayKey';
-import { confirmDestructive } from '../design/confirm';
+import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
 import { colors, spacing } from '../design/theme';
 import { Section } from '../design/ui';
+import { SettingsButton } from '../navigation/SettingsHost';
 import { DeadlinePicker } from '../home/DeadlinePicker';
 import { GoalProgress } from '../home/GoalProgress';
 import { QuickLog } from '../home/QuickLog';
@@ -30,31 +30,14 @@ import { TaskForm } from '../home/TaskForm';
 import { TaskListCard } from '../home/TaskListCard';
 import { TodayStrip } from '../home/TodayStrip';
 import { WeekBars } from '../home/WeekBars';
-import { deleteNotePhoto } from '../notes/photos';
-import { resetNotes, useNotes } from '../notes/store';
+import { useNotes } from '../notes/store';
 import { eventsOnDay } from '../schedule/occurrences';
-import { resetSchedule, useSchedule } from '../schedule/store';
-
-function confirmReset() {
-  confirmDestructive({
-    title: 'Reset all data?',
-    message:
-      'This permanently deletes your goals and their progress, tasks, to-buy list, notes, and schedule on this device. ' +
-      "Chat isn't affected.",
-    confirmLabel: 'Reset',
-    onConfirm: () => {
-      resetCoachData();
-      for (const note of resetNotes()) {
-        if (note.type === 'recipe') deleteNotePhoto(note.photoUri);
-      }
-      resetSchedule();
-    },
-  });
-}
+import { useSchedule } from '../schedule/store';
 
 // Home is driven by the featured goal selected from Goals.
 export function HomeScreen() {
   const type = useType();
+  const accent = useAccent();
   const insets = useSafeAreaInsets();
   const { state, loaded } = useCoach();
   const notes = useNotes(); // loaded here too so Reset can't run before notes are read
@@ -68,8 +51,8 @@ export function HomeScreen() {
 
   const featured = getFeaturedGoal(state);
   const entries = entriesForGoal(state, featured.id);
-  const todayEntry = entries.find((e) => e.date === todayKey);
-  const loggedToday = (todayEntry?.value ?? 0) > 0;
+  const todayEntries = entries.filter((e) => e.date === todayKey);
+  const loggedToday = todayEntries.length > 0;
   const week = last7Days(entries, todayKey);
   const activeDays = week.filter((d) => d.total > 0).length;
   const streak = currentStreak(entries, todayKey);
@@ -100,10 +83,11 @@ export function HomeScreen() {
         >
           <View style={styles.header}>
             <View style={styles.statusRow}>
-              <View style={[styles.dot, { backgroundColor: loggedToday ? colors.success : colors.accent }]} />
-              <Text style={type.label}>
+              <View style={[styles.dot, { backgroundColor: loggedToday ? colors.success : accent.accent }]} />
+              <Text style={[type.label, styles.statusText]} numberOfLines={1}>
                 {loggedToday ? 'On track' : 'Not logged today'} · {dateLabel}
               </Text>
+              <SettingsButton />
             </View>
             <Text
               style={[type.display, styles.appName]}
@@ -111,7 +95,7 @@ export function HomeScreen() {
               adjustsFontSizeToFit
               accessibilityRole="header"
             >
-              JINESIST
+              JINOTE
             </Text>
             <Text style={[type.body, styles.mission]}>{homeGoal.mission}</Text>
           </View>
@@ -152,8 +136,9 @@ export function HomeScreen() {
 
           <Section label="Quick log">
             <QuickLog
+              goalType={featured.type}
               unit={featured.unit}
-              todayEntry={todayEntry}
+              todayEntries={todayEntries}
               onLog={(count, note) => logProgress(featured.id, count, note, todayKey) ?? { isNewBest: false }}
             />
           </Section>
@@ -169,11 +154,6 @@ export function HomeScreen() {
             />
           </Section>
 
-          <View style={styles.footer}>
-            <Pressable onPress={confirmReset} hitSlop={10} accessibilityRole="button">
-              <Text style={[type.label, styles.resetText]}>Reset all data</Text>
-            </Pressable>
-          </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -228,18 +208,11 @@ const styles = StyleSheet.create({
     maxWidth: 560,
     alignSelf: 'center',
   },
-  header: { gap: 2 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  header: { gap: spacing.xs },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 36 },
+  statusText: { flex: 1 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  appName: { fontSize: 68, lineHeight: 72, letterSpacing: 1.5, marginTop: 4 },
+  appName: { fontSize: 68, lineHeight: 72, letterSpacing: 1.5 },
   mission: { color: colors.textMuted },
   tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  footer: {
-    marginTop: spacing.xl * 2,
-    paddingTop: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    alignItems: 'center',
-  },
-  resetText: { color: colors.textMuted, fontSize: 10 },
 });

@@ -1,8 +1,9 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { weekdayShort } from '../coach/days';
+import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
-import { colors } from '../design/theme';
+import { colors, radius, spacing } from '../design/theme';
 import { EventRow } from './EventRow';
 import type { DayItem } from './occurrences';
 import { TaskRow } from './TaskRow';
@@ -20,13 +21,14 @@ interface Props {
 // agenda — events and dated tasks together, in the order agendaForDay puts them in.
 export function DayRow({ day, isToday, items, onEventPress, onTaskToggle, onTaskEdit }: Props) {
   const type = useType();
+  const accent = useAccent();
   return (
-    <View style={[styles.row, isToday && styles.today]}>
+    <View style={[styles.row, isToday && { backgroundColor: accent.accentSoft }]}>
       <View style={styles.header}>
-        <Text style={[type.label, isToday && styles.todayText]}>
+        <Text style={[type.label, isToday && { color: accent.accent }]}>
           {weekdayShort(day).toUpperCase()} {Number(day.slice(8))}
         </Text>
-        {isToday ? <Text style={[type.label, styles.badge]}>TODAY</Text> : null}
+        {isToday ? <Text style={[type.label, { color: accent.accent }]}>TODAY</Text> : null}
       </View>
       {items.length === 0 ? (
         <Text style={[type.mono, styles.empty]}>Nothing scheduled</Text>
@@ -50,14 +52,11 @@ export function DayRow({ day, isToday, items, onEventPress, onTaskToggle, onTask
 
 const styles = StyleSheet.create({
   row: {
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    gap: 2,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.control,
+    gap: spacing.xs / 2,
   },
-  today: { backgroundColor: colors.accentSoft },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 18 },
-  todayText: { color: colors.accent },
-  badge: { color: colors.accent },
-  empty: { color: colors.textMuted, paddingVertical: 6 },
+  empty: { color: colors.textMuted, paddingVertical: spacing.sm },
 });

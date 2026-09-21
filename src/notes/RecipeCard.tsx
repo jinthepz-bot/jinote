@@ -1,14 +1,16 @@
 import { Image, StyleSheet, Text, View } from 'react-native';
 
+import { useAccent } from '../design/accent';
 import { confirmDestructive } from '../design/confirm';
 import { useType } from '../design/fonts';
-import { colors, radius } from '../design/theme';
+import { colors, radius, spacing } from '../design/theme';
 import { Card, IconButton } from '../design/ui';
 import { deleteNotePhoto } from './photos';
 import { deleteNote, type RecipeNote } from './store';
 
 export function RecipeCard({ note }: { note: RecipeNote }) {
   const type = useType();
+  const accent = useAccent();
 
   const confirmDelete = () =>
     confirmDestructive({
@@ -28,21 +30,23 @@ export function RecipeCard({ note }: { note: RecipeNote }) {
           <Image source={{ uri: note.photoUri }} style={styles.photo} resizeMode="cover" />
         ) : (
           <View style={styles.placeholder}>
-            <Text style={[type.label, styles.placeholderText]}>NO PHOTO</Text>
+            <Text style={[type.label, { color: accent.accent, letterSpacing: 1 }]}>NO PHOTO</Text>
           </View>
         )}
-        <IconButton icon="trash-outline" label={`Delete recipe "${note.title}"`} onPress={confirmDelete} color={colors.onAccent} />
+        <IconButton icon="trash-outline" label={`Delete recipe "${note.title}"`} onPress={confirmDelete} color={colors.text} />
       </View>
       <Text style={[type.bodyStrong, styles.title]} numberOfLines={2}>
         {note.title}
       </Text>
       <View style={styles.tags}>
-        {note.cookTime ? <Text style={[type.mono, styles.tag]}>{note.cookTime}</Text> : null}
-        <Text style={[type.mono, styles.tag]}>{note.category}</Text>
+        {note.cookTime ? (
+          <Text style={[type.mono, styles.tag, { color: accent.accent }]}>{note.cookTime}</Text>
+        ) : null}
+        <Text style={[type.mono, styles.tag, { color: accent.accent }]}>{note.category}</Text>
       </View>
       <View style={styles.rating} accessibilityLabel={`${note.rating} out of 3 stars`}>
         {[1, 2, 3].map((star) => (
-          <Text key={star} style={[styles.star, star <= note.rating && styles.starActive]}>
+          <Text key={star} style={[styles.star, star <= note.rating && { color: accent.accent }]}>
             ★
           </Text>
         ))}
@@ -52,7 +56,7 @@ export function RecipeCard({ note }: { note: RecipeNote }) {
 }
 
 const styles = StyleSheet.create({
-  card: { flex: 1, minWidth: 0, padding: 0, overflow: 'hidden', gap: 8 },
+  card: { flex: 1, minWidth: 0, padding: 0, overflow: 'hidden', gap: spacing.sm },
   imageWrap: { position: 'relative' },
   photo: { width: '100%', aspectRatio: 1.15, backgroundColor: colors.surface2 },
   placeholder: {
@@ -64,11 +68,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  placeholderText: { color: colors.accent, letterSpacing: 1 },
-  title: { paddingHorizontal: 10, paddingTop: 2 },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, paddingHorizontal: 10 },
-  tag: { color: colors.accent, backgroundColor: colors.surface2, borderRadius: radius.control, paddingHorizontal: 6, paddingVertical: 3, fontSize: 9 },
-  rating: { flexDirection: 'row', gap: 2, paddingHorizontal: 10, paddingBottom: 10 },
+  title: { paddingHorizontal: spacing.md, paddingTop: 2 },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, paddingHorizontal: spacing.md },
+  tag: {
+    backgroundColor: colors.surface2,
+    borderRadius: radius.control,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    fontSize: 9,
+  },
+  rating: { flexDirection: 'row', gap: 2, paddingHorizontal: spacing.md, paddingBottom: spacing.md },
   star: { color: colors.border, fontSize: 15 },
-  starActive: { color: colors.accent },
 });

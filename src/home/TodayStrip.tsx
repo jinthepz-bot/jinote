@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useType } from '../design/fonts';
-import { colors } from '../design/theme';
+import { colors, spacing } from '../design/theme';
 import { Card } from '../design/ui';
 import { describeEventTime } from '../schedule/format';
 import type { ScheduleEvent } from '../schedule/store';
@@ -39,9 +39,9 @@ export function TodayStrip({ events }: { events: ScheduleEvent[] }) {
 }
 
 const styles = StyleSheet.create({
-  card: { gap: 6 },
+  card: { gap: spacing.sm },
   empty: { color: colors.textMuted },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 2 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 2 },
   divider: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8, marginTop: 2 },
   time: { width: 44, color: colors.text },
   title: { flex: 1 },

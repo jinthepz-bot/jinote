@@ -4,9 +4,10 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { formatAmount, parseAmount, sanitizeAmountInput } from '../coach/format';
 import type { BuyItem } from '../coach/store';
+import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
-import { colors, radius } from '../design/theme';
-import { Card } from '../design/ui';
+import { colors, radius, sizes, spacing, keyboardAppearance } from '../design/theme';
+import { Card, Checkbox, RowIconButton } from '../design/ui';
 
 interface Props {
   items: BuyItem[];
@@ -17,6 +18,7 @@ interface Props {
 
 export function BuyListCard({ items, onAdd, onToggle, onDelete }: Props) {
   const type = useType();
+  const accent = useAccent();
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const canAdd = name.trim() !== '';
@@ -38,32 +40,14 @@ export function BuyListCard({ items, onAdd, onToggle, onDelete }: Props) {
       ) : (
         sorted.map((item, i) => (
           <View key={item.id} style={[styles.row, i > 0 && styles.divider]}>
-            <Pressable
-              onPress={() => onToggle(item.id)}
-              hitSlop={10}
-              style={[styles.checkbox, item.bought && styles.checked]}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: item.bought }}
-              aria-checked={item.bought}
-              accessibilityLabel={`Bought ${item.name}`}
-            >
-              {item.bought ? <Ionicons name="checkmark" size={15} color={colors.onAccent} /> : null}
-            </Pressable>
+            <Checkbox checked={item.bought} onPress={() => onToggle(item.id)} label={`Bought ${item.name}`} />
             <Text style={[type.body, styles.name, item.bought && styles.boughtText]} onPress={() => onToggle(item.id)}>
               {item.name}
             </Text>
             {item.price !== null ? (
               <Text style={[type.mono, styles.price, item.bought && styles.boughtText]}>{formatAmount(item.price)}</Text>
             ) : null}
-            <Pressable
-              onPress={() => onDelete(item.id)}
-              hitSlop={10}
-              style={({ pressed }) => [styles.delete, pressed && styles.pressed]}
-              accessibilityRole="button"
-              accessibilityLabel={`Delete ${item.name}`}
-            >
-              <Ionicons name="trash-outline" size={18} color={colors.textMuted} />
-            </Pressable>
+            <RowIconButton icon="trash-outline" label={`Delete ${item.name}`} onPress={() => onDelete(item.id)} />
           </View>
         ))
       )}
@@ -75,7 +59,7 @@ export function BuyListCard({ items, onAdd, onToggle, onDelete }: Props) {
           onChangeText={setName}
           placeholder="Item"
           placeholderTextColor={colors.textMuted}
-          keyboardAppearance="dark"
+          keyboardAppearance={keyboardAppearance}
           returnKeyType="done"
           onSubmitEditing={add}
           submitBehavior="submit"
@@ -88,17 +72,22 @@ export function BuyListCard({ items, onAdd, onToggle, onDelete }: Props) {
           placeholder="Price"
           placeholderTextColor={colors.textMuted}
           keyboardType="decimal-pad"
-          keyboardAppearance="dark"
+          keyboardAppearance={keyboardAppearance}
           accessibilityLabel="Item price"
         />
         <Pressable
           onPress={add}
           disabled={!canAdd}
-          style={({ pressed }) => [styles.addButton, !canAdd && styles.disabled, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.addButton,
+            { backgroundColor: accent.accent },
+            !canAdd && styles.disabled,
+            pressed && styles.pressed,
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Add item"
         >
-          <Ionicons name="add" size={22} color={colors.onAccent} />
+          <Ionicons name="add" size={22} color={accent.onAccent} />
         </Pressable>
       </View>
     </Card>
@@ -107,48 +96,42 @@ export function BuyListCard({ items, onAdd, onToggle, onDelete }: Props) {
 
 const styles = StyleSheet.create({
   card: { padding: 0, overflow: 'hidden' },
-  empty: { color: colors.textMuted, paddingHorizontal: 14, paddingVertical: 14 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
-  divider: { borderTopWidth: 1, borderTopColor: colors.border },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    borderColor: colors.textMuted,
+  empty: { color: colors.textMuted, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
+  row: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  checked: { backgroundColor: colors.success, borderColor: colors.success },
+  divider: { borderTopWidth: 1, borderTopColor: colors.border },
   name: { flex: 1 },
   price: { color: colors.text, fontSize: 13 },
   boughtText: { color: colors.textMuted, textDecorationLine: 'line-through' },
-  delete: { padding: 2 },
   pressed: { opacity: 0.6 },
   addRow: {
     flexDirection: 'row',
-    gap: 8,
-    padding: 10,
+    gap: spacing.sm,
+    padding: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     backgroundColor: colors.surface2,
   },
   input: {
-    height: 42,
+    height: sizes.control,
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.control,
-    paddingHorizontal: 10,
+    paddingHorizontal: spacing.md,
     color: colors.text,
   },
   nameInput: { flex: 1, minWidth: 0 },
   priceInput: { width: 84 },
   addButton: {
-    width: 42,
-    height: 42,
+    width: sizes.control,
+    height: sizes.control,
     borderRadius: radius.control,
-    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },

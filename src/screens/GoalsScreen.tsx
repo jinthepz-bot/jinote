@@ -19,7 +19,8 @@ import { useTodayKey } from '../coach/useTodayKey';
 import { confirmDestructive } from '../design/confirm';
 import { useType } from '../design/fonts';
 import { colors, radius, spacing } from '../design/theme';
-import { ScreenTitle, Section } from '../design/ui';
+import { AddAction, Screen, ScreenTitle, Section } from '../design/ui';
+import { SettingsButton } from '../navigation/SettingsHost';
 import { ActivityHeatmap } from '../goals/ActivityHeatmap';
 import { GoalCard } from '../goals/GoalCard';
 import { GoalForm } from '../goals/GoalForm';
@@ -74,6 +75,7 @@ export function GoalsScreen() {
           <ScreenTitle
             label={`${state.goals.length} ${state.goals.length === 1 ? 'goal' : 'goals'} · ${formatDayKey(todayKey, todayKey)}`}
             title="GOALS"
+            action={<SettingsButton />}
           />
 
           <Section label="Featured · on Home">{cardFor(featured)}</Section>
@@ -88,14 +90,7 @@ export function GoalsScreen() {
             ) : (
               others.map(cardFor)
             )}
-            <Pressable
-              onPress={() => setCreating(true)}
-              style={({ pressed }) => [styles.newGoal, pressed && styles.pressed]}
-              accessibilityRole="button"
-              accessibilityLabel="New goal"
-            >
-              <Text style={[type.label, styles.newGoalText]}>+ New goal</Text>
-            </Pressable>
+            <AddAction label="New goal" onPress={() => setCreating(true)} />
           </Section>
 
         </ScrollView>
@@ -151,15 +146,5 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   muted: { color: colors.textMuted },
-  newGoal: {
-    height: 48,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  newGoalText: { color: colors.accent },
   pressed: { opacity: 0.7 },
 });

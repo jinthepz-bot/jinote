@@ -1,7 +1,8 @@
 {
   "expo": {
-    "name": "jinesis",
-    "slug": "jinesis",
+    "name": "Jinote",
+    "slug": "jinote",
+    "scheme": "jinote",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -21,27 +22,28 @@
     "web": {
       "favicon": "./assets/favicon.png",
       "output": "single",
-      "name": "Jinesist",
-      "shortName": "Jinesist",
-      "themeColor": "#c98a3b",
-      "backgroundColor": "#1c1a17",
+      "name": "Jinote",
+      "shortName": "Jinote",
+      "themeColor": "#B4502A",
+      "backgroundColor": "#F4EEE2",
       "display": "standalone",
       "lang": "en"
     },
     "experiments": {
-      "baseUrl": "/jinesis"
+      "baseUrl": "/jinote"
     },
     "plugins": [
       "expo-font",
       [
         "expo-image-picker",
         {
-          "photosPermission": "Jinesist uses your photo library to attach a picture to a recipe.",
-          "cameraPermission": "Jinesist uses your camera to attach a picture to a recipe.",
+          "photosPermission": "Jinote uses your photo library to attach a picture to a recipe.",
+          "cameraPermission": "Jinote uses your camera to attach a picture to a recipe.",
           "microphonePermission": false
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      "expo-sharing"
     ]
   }
 }

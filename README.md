@@ -1,4 +1,4 @@
-# Jinesist
+# Jinote
 
 A personal accountability coach for your phone. Built with Expo (SDK 57) and Google's Gemini API (free tier).
 
@@ -24,7 +24,7 @@ npm run web               # or open it in a browser at http://localhost:8081
 
 Without a key the Chat screen runs in **mock mode** (a MOCK badge shows in its header) and understands a few typed commands: `log 24`, `remind me to <task>`, `note down <thought>` (saved as a quick note), `buy <item>`. Everything outside Chat behaves the same with or without a key.
 
-> **Why not `npx expo start`?** The parent folder name (`Agent:Asisstant Jinesis`) contains a colon, which breaks how npm and npx add `node_modules/.bin` to `PATH`. The npm scripts call Expo's CLI through `node` directly to get around this. Renaming the folder to drop the colon also fixes it.
+> **Why not `npx expo start`?** The parent folder name contains a colon, which breaks how npm and npx add `node_modules/.bin` to `PATH`. The npm scripts call Expo's CLI through `node` directly to get around this. Renaming the folder to drop the colon also fixes it.
 
 ## Gemini API setup
 

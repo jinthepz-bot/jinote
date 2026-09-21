@@ -12,8 +12,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
-import { colors, radius } from '../design/theme';
+import { colors, radius, spacing, keyboardAppearance } from '../design/theme';
 
 // Enter sends and Shift+Enter starts a new line, but only where there's a keyboard to
 // hold Shift with. A touch keyboard keeps the plain multiline behaviour — the Send
@@ -41,6 +42,7 @@ interface Props {
 
 export function Composer({ busy, onSend, onStop }: Props) {
   const type = useType();
+  const accent = useAccent();
   const [text, setText] = useState('');
   const insets = useSafeAreaInsets();
   const keyboardVisible = useKeyboardVisible();
@@ -77,7 +79,7 @@ export function Composer({ busy, onSend, onStop }: Props) {
         onChangeText={setText}
         placeholder={busy ? 'Working on it...' : 'Message your coach'}
         placeholderTextColor={colors.textMuted}
-        keyboardAppearance="dark"
+        keyboardAppearance={keyboardAppearance}
         accessibilityLabel="Message"
         onKeyPress={enterSends ? handleKeyPress : undefined}
         multiline
@@ -88,12 +90,12 @@ export function Composer({ busy, onSend, onStop }: Props) {
         </Pressable>
       ) : (
         <Pressable
-          style={[styles.button, !canSend && styles.disabled]}
+          style={[styles.button, { backgroundColor: accent.accent }, !canSend && styles.disabled]}
           onPress={submit}
           disabled={!canSend}
           accessibilityRole="button"
         >
-          <Text style={[type.label, styles.sendText]}>Send</Text>
+          <Text style={[type.label, styles.sendText, { color: accent.onAccent }]}>Send</Text>
         </Pressable>
       )}
     </View>
@@ -106,7 +108,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 8,
     paddingHorizontal: 12,
-    paddingTop: 10,
+    paddingTop: spacing.md,
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
@@ -128,10 +130,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: radius.control,
     justifyContent: 'center',
-    backgroundColor: colors.accent,
   },
   disabled: { opacity: 0.45 },
-  sendText: { color: colors.onAccent, fontSize: 12 },
+  sendText: { fontSize: 12 },
   stop: { backgroundColor: colors.accentStrongSoft, borderWidth: 1, borderColor: colors.accentStrong },
   stopText: { color: colors.text, fontSize: 12 },
 });

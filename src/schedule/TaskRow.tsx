@@ -1,9 +1,9 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import type { Task } from '../coach/store';
 import { useType } from '../design/fonts';
-import { colors } from '../design/theme';
+import { colors, spacing } from '../design/theme';
+import { Checkbox, RowIconButton } from '../design/ui';
 
 interface Props {
   task: Task;
@@ -18,50 +18,23 @@ export function TaskRow({ task, onToggle, onEdit }: Props) {
   const type = useType();
   return (
     <View style={styles.row}>
-      <Pressable
+      <Text style={[type.mono, styles.time]}>{task.time ?? ''}</Text>
+      <Checkbox checked={task.done} onPress={onToggle} label={task.text} size={20} />
+      <Text
+        style={[type.body, styles.title, task.done && styles.titleDone]}
+        numberOfLines={1}
         onPress={onToggle}
-        style={({ pressed }) => [styles.tapArea, pressed && styles.pressed]}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: task.done }}
-        accessibilityLabel={task.text}
       >
-        <Text style={[type.mono, styles.time]}>{task.time ?? ''}</Text>
-        <View style={[styles.checkbox, task.done && styles.checked]}>
-          {task.done ? <Ionicons name="checkmark" size={12} color={colors.onAccent} /> : null}
-        </View>
-        <Text style={[type.body, styles.title, task.done && styles.titleDone]} numberOfLines={1}>
-          {task.text}
-        </Text>
-      </Pressable>
-      <Pressable
-        onPress={onEdit}
-        hitSlop={10}
-        style={({ pressed }) => [styles.editButton, pressed && styles.pressed]}
-        accessibilityRole="button"
-        accessibilityLabel={`Edit ${task.text}`}
-      >
-        <Ionicons name="calendar-outline" size={16} color={colors.textMuted} />
-      </Pressable>
+        {task.text}
+      </Text>
+      <RowIconButton icon="calendar-outline" label={`Edit ${task.text}`} onPress={onEdit} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8 },
-  tapArea: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  pressed: { opacity: 0.6 },
-  time: { width: 44, color: colors.text, paddingTop: 2 },
-  checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: colors.textMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checked: { backgroundColor: colors.success, borderColor: colors.success },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
+  time: { width: 44, color: colors.text },
   title: { flex: 1 },
   titleDone: { color: colors.textMuted, textDecorationLine: 'line-through' },
-  editButton: { padding: 2 },
 });

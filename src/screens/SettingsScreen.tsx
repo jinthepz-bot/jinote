@@ -1,10 +1,18 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
-import { Linking, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { resetCoachData } from '../coach/store';
+import { applyBackup, currentCounts, describeCounts, parseBackup, type BackupCounts } from '../data/backup';
+import { exportBackup, readBackupFile } from '../data/backupFile';
+import { useAccent, useAccentChooser } from '../design/accent';
+import { confirmDestructive } from '../design/confirm';
 import { useType } from '../design/fonts';
-import { colors, spacing } from '../design/theme';
-import { Card, fieldStyles, Section, ScreenTitle, ToggleRow } from '../design/ui';
+import { ACCENTS, colors, radius, sizes, spacing, keyboardAppearance } from '../design/theme';
+import { Button, Card, fieldStyles, screenContentStyle, ScreenTitle, Section, ToggleRow } from '../design/ui';
+import { deleteNotePhoto } from '../notes/photos';
+import { resetNotes } from '../notes/store';
 import { notificationsSupported, requestPermission, usePermissionState, type PermissionState } from '../notifications/scheduler';
 import {
   setDailyReminderEnabled,
@@ -15,6 +23,7 @@ import {
   setStreakAtRiskEnabled,
   useNotificationPrefs,
 } from '../notifications/store';
+import { resetSchedule } from '../schedule/store';
 import { isTimeKey, sanitizeTimeInput } from '../schedule/time';
 
 // Turns a type on with a permission prompt the first time it's needed, never before —
@@ -25,8 +34,9 @@ async function enable(next: boolean, permission: PermissionState, setter: (v: bo
   setter(next);
 }
 
-export function SettingsScreen() {
+export function SettingsScreen({ onClose }: { onClose: () => void }) {
   const type = useType();
+  const accent = useAccent();
   const insets = useSafeAreaInsets();
   const { state: prefs, loaded } = useNotificationPrefs();
   const permission = usePermissionState();
@@ -35,49 +45,66 @@ export function SettingsScreen() {
 
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}>
-        <ScreenTitle label="Reminders from the coach" title="SETTINGS" />
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}
+        keyboardShouldPersistTaps="handled"
+      >
+        <ScreenTitle
+          label="Appearance, reminders and your data"
+          title="SETTINGS"
+          action={
+            <Pressable
+              onPress={onClose}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Close settings"
+              style={({ pressed }) => [styles.close, pressed && styles.pressed]}
+            >
+              <Ionicons name="close" size={20} color={colors.text} />
+            </Pressable>
+          }
+        />
 
-        {!notificationsSupported ? (
-          <Card>
-            <Text style={[type.body, styles.muted]}>
-              Notifications aren't available on web — install the app on your phone to get reminders.
-            </Text>
-          </Card>
-        ) : (
-          <>
-            {permission === 'denied' ? (
-              <Card style={styles.warningCard}>
-                <Text style={[type.bodyStrong, styles.warningTitle]}>Notifications are off in your phone's settings</Text>
-                <Text style={[type.body, styles.muted]}>
-                  Your preferences below are saved, but nothing will show up until you turn notifications back on for
-                  Jinesist.
-                </Text>
-                <Text
-                  style={[type.label, styles.link]}
-                  onPress={() => Linking.openSettings()}
-                  accessibilityRole="button"
-                  accessibilityLabel="Open phone settings"
-                >
-                  Open settings
-                </Text>
-              </Card>
-            ) : null}
+        <AppearanceSection />
 
-            <Section label="All notifications">
-              <Card>
-                <ToggleRow
-                  label="Notifications"
-                  hint="One switch to turn every reminder below off, without losing your choices."
-                  value={prefs.enabled}
-                  onChange={setNotificationsEnabled}
-                />
-              </Card>
-            </Section>
+        <Section label="Notifications">
+          {!notificationsSupported ? (
+            <Card>
+              <Text style={[type.body, styles.muted]}>
+                Notifications aren't available on web — install the app on your phone to get reminders.
+              </Text>
+            </Card>
+          ) : (
+            <>
+              {permission === 'denied' ? (
+                <Card style={styles.warningCard}>
+                  <Text style={[type.bodyStrong, styles.warningTitle]}>Notifications are off in your phone's settings</Text>
+                  <Text style={[type.body, styles.muted]}>
+                    Your preferences below are saved, but nothing will show up until you turn notifications back on for
+                    Jinote.
+                  </Text>
+                  <Text
+                    style={[type.label, { color: accent.accent, marginTop: spacing.xs / 2 }]}
+                    onPress={() => Linking.openSettings()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open phone settings"
+                  >
+                    Open settings
+                  </Text>
+                </Card>
+              ) : null}
 
-            <Section label="Reminders">
               <Card style={styles.list}>
                 <View style={styles.item}>
+                  <ToggleRow
+                    label="Notifications"
+                    hint="One switch to turn every reminder below off, without losing your choices."
+                    value={prefs.enabled}
+                    onChange={setNotificationsEnabled}
+                  />
+                </View>
+
+                <View style={[styles.item, styles.divider]}>
                   <ToggleRow
                     label="Daily log reminder"
                     hint="If I haven't logged progress on my featured goal by this time, remind me."
@@ -116,12 +143,180 @@ export function SettingsScreen() {
                   />
                 </View>
               </Card>
-            </Section>
-          </>
-        )}
+            </>
+          )}
+        </Section>
+
+        <DataSection />
       </ScrollView>
     </View>
   );
+}
+
+// --- appearance
+
+function AppearanceSection() {
+  const type = useType();
+  const { palette, savedId, previewId, preview, commit, cancel } = useAccentChooser();
+  const previewing = previewId !== null && previewId !== savedId;
+
+  return (
+    <Section label="Appearance" aside={palette.name}>
+      <Card style={styles.card}>
+        <Text style={[type.body, styles.muted]}>
+          The accent colours buttons, highlights and charts. Tap one to see it across the app, then keep it.
+        </Text>
+
+        <View style={styles.swatches} accessibilityRole="radiogroup">
+          {ACCENTS.map((option) => {
+            const selected = option.id === palette.id;
+            return (
+              <Pressable
+                key={option.id}
+                onPress={() => preview(option.id)}
+                style={({ pressed }) => [
+                  styles.swatch,
+                  { borderColor: selected ? colors.text : colors.border },
+                  pressed && styles.pressed,
+                ]}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: selected }}
+                aria-checked={selected}
+                accessibilityLabel={option.name}
+              >
+                <View style={[styles.swatchDot, { backgroundColor: option.hex }]}>
+                  {selected ? <Ionicons name="checkmark" size={18} color={palette.onAccent} /> : null}
+                </View>
+                <Text style={[type.label, styles.swatchLabel]} numberOfLines={1}>
+                  {option.name}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {previewing ? (
+          <View style={styles.previewRow}>
+            <Text style={[type.mono, styles.previewText]} numberOfLines={2}>
+              Previewing {palette.name}. Keep it?
+            </Text>
+            <Button label="Cancel" variant="secondary" small onPress={cancel} accessibilityLabel="Cancel accent change" />
+            <Button label="Keep" small onPress={commit} accessibilityLabel={`Keep ${palette.name}`} />
+          </View>
+        ) : null}
+      </Card>
+    </Section>
+  );
+}
+
+// --- data
+
+type Status = { tone: 'ok' | 'error'; text: string } | null;
+
+function DataSection() {
+  const type = useType();
+  const [busy, setBusy] = useState<'export' | 'import' | null>(null);
+  const [status, setStatus] = useState<Status>(null);
+  const counts = currentCounts();
+
+  const runExport = async () => {
+    setBusy('export');
+    setStatus(null);
+    const result = await exportBackup();
+    setBusy(null);
+    setStatus(
+      result.ok
+        ? { tone: 'ok', text: Platform.OS === 'web' ? `Downloaded ${result.where}` : `Exported ${result.where}` }
+        : { tone: 'error', text: result.error },
+    );
+  };
+
+  const runImport = async () => {
+    setBusy('import');
+    setStatus(null);
+    const read = await readBackupFile();
+    setBusy(null);
+    if (!read.ok) {
+      if (!read.canceled) setStatus({ tone: 'error', text: read.error });
+      return;
+    }
+    const parsed = parseBackup(read.text);
+    if (!parsed.ok) {
+      setStatus({ tone: 'error', text: parsed.error });
+      return;
+    }
+    confirmDestructive({
+      title: 'Replace everything with this backup?',
+      message: `${read.name}\n\nThis replaces your goals, tasks, journal and schedule on this device with:\n${describeCounts(parsed.counts)}`,
+      confirmLabel: 'Replace',
+      onConfirm: () => {
+        applyBackup(parsed.backup);
+        setStatus({ tone: 'ok', text: `Imported ${describeCounts(parsed.counts)}` });
+      },
+    });
+  };
+
+  const confirmReset = () =>
+    confirmDestructive({
+      title: 'Reset all data?',
+      message:
+        'This permanently deletes your goals and their progress, tasks, to-buy list, notes, and schedule on this device. ' +
+        "Chat isn't affected. Export first if you might want it back.",
+      confirmLabel: 'Reset',
+      onConfirm: () => {
+        resetCoachData();
+        for (const note of resetNotes()) {
+          if (note.type === 'recipe') deleteNotePhoto(note.photoUri);
+        }
+        resetSchedule();
+        setStatus({ tone: 'ok', text: 'All data reset.' });
+      },
+    });
+
+  return (
+    <Section label="Your data" aside={describeCountsShort(counts)}>
+      <Card style={styles.card}>
+        <Text style={[type.body, styles.muted]}>
+          Everything stays on this device. Export writes one file you can keep or move to another phone; importing it
+          replaces what's here.
+        </Text>
+
+        <View style={styles.dataButtons}>
+          <Button
+            label={busy === 'export' ? 'Exporting...' : 'Export'}
+            onPress={runExport}
+            disabled={busy !== null}
+            accessibilityLabel="Export all data to a file"
+          />
+          <Button
+            label={busy === 'import' ? 'Reading...' : 'Import'}
+            variant="secondary"
+            onPress={runImport}
+            disabled={busy !== null}
+            accessibilityLabel="Import data from a backup file"
+          />
+        </View>
+
+        {status ? (
+          <Text style={[type.mono, status.tone === 'ok' ? styles.statusOk : styles.statusError]}>{status.text}</Text>
+        ) : null}
+
+        <Text style={[type.mono, styles.footnote]}>
+          Recipe photos stay on this device — a backup records that a photo was attached, not the image itself.
+        </Text>
+
+        <View style={styles.resetRow}>
+          <Pressable onPress={confirmReset} hitSlop={8} accessibilityRole="button" accessibilityLabel="Reset all data">
+            <Text style={[type.label, styles.resetText]}>Reset all data</Text>
+          </Pressable>
+        </View>
+      </Card>
+    </Section>
+  );
+}
+
+function describeCountsShort(counts: BackupCounts): string {
+  return `${counts.goals + counts.tasks + counts.notes + counts.events} items`;
 }
 
 // Local draft text so typing "19:0" doesn't get overwritten mid-keystroke by the last
@@ -147,7 +342,7 @@ function TimeField({ value, onChange }: { value: string; onChange: (time: string
         placeholder="19:00"
         placeholderTextColor={colors.textMuted}
         keyboardType="number-pad"
-        keyboardAppearance="dark"
+        keyboardAppearance={keyboardAppearance}
         maxLength={5}
         accessibilityLabel="Daily reminder time"
       />
@@ -157,22 +352,48 @@ function TimeField({ value, onChange }: { value: string; onChange: (time: string
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  content: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xl * 2,
-    gap: spacing.xl,
-    width: '100%',
-    maxWidth: 560,
-    alignSelf: 'center',
-  },
+  content: { ...screenContentStyle, gap: spacing.xl },
+  card: { gap: spacing.md },
   muted: { color: colors.textMuted },
+  close: {
+    width: sizes.controlSm,
+    height: sizes.controlSm,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pressed: { opacity: 0.7 },
   warningCard: { gap: spacing.xs, borderColor: colors.accentStrong },
   warningTitle: { color: colors.accentStrong },
-  link: { color: colors.accent, marginTop: 2 },
   list: { gap: 0 },
   item: { paddingVertical: spacing.xs, gap: spacing.sm },
-  divider: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.xs, paddingTop: spacing.sm },
-  timeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginLeft: 0 },
-  timeInput: { width: 90, height: 38, textAlign: 'center' },
+  divider: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.sm, paddingTop: spacing.md },
+  timeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  timeInput: { width: 90, height: sizes.controlSm, textAlign: 'center' },
   invalid: { borderColor: colors.accentStrong },
+  swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  swatch: {
+    flexGrow: 1,
+    flexBasis: 96,
+    minWidth: 0,
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    backgroundColor: colors.surface2,
+  },
+  swatchDot: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  swatchLabel: { letterSpacing: 0.4 },
+  previewRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  previewText: { flex: 1, color: colors.text },
+  dataButtons: { flexDirection: 'row', gap: spacing.sm },
+  statusOk: { color: colors.success },
+  statusError: { color: colors.accentStrong },
+  footnote: { color: colors.textMuted, fontSize: 11 },
+  resetRow: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md, alignItems: 'flex-start' },
+  resetText: { color: colors.accentStrong },
 });

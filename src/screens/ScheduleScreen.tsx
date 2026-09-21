@@ -6,9 +6,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { addDays, formatDayKey, startOfWeek } from '../coach/days';
 import { deleteTask, toggleTask, updateTask, useCoach } from '../coach/store';
 import { useTodayKey } from '../coach/useTodayKey';
+import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
 import { colors, radius, spacing } from '../design/theme';
-import { Card, ScreenTitle, Section } from '../design/ui';
+import { AddAction, Card, ScreenTitle, Section } from '../design/ui';
+import { SettingsButton } from './../navigation/SettingsHost';
 import { TaskForm } from '../home/TaskForm';
 import { EventForm } from '../schedule/EventForm';
 import { upcomingOccurrences } from '../schedule/occurrences';
@@ -21,6 +23,7 @@ const UPCOMING_LIMIT = 8;
 
 export function ScheduleScreen() {
   const type = useType();
+  const accent = useAccent();
   const insets = useSafeAreaInsets();
   const { state, loaded } = useSchedule();
   const coach = useCoach();
@@ -49,6 +52,7 @@ export function ScheduleScreen() {
         <ScreenTitle
           label={`${state.events.length} ${state.events.length === 1 ? 'event' : 'events'} · ${formatDayKey(todayKey, todayKey)}`}
           title="SCHEDULE"
+          action={<SettingsButton />}
         />
 
         <Section label="This week">
@@ -63,7 +67,7 @@ export function ScheduleScreen() {
                 <Ionicons name="chevron-back" size={20} color={colors.text} />
               </Pressable>
               <Pressable onPress={() => setWeekStart(startOfWeek(todayKey))} disabled={onCurrentWeek} hitSlop={6}>
-                <Text style={[type.mono, styles.weekRange, !onCurrentWeek && styles.weekRangeLink]}>{weekRange}</Text>
+                <Text style={[type.mono, styles.weekRange, !onCurrentWeek && { color: accent.accent }]}>{weekRange}</Text>
               </Pressable>
               <Pressable
                 onPress={() => setWeekStart((w) => addDays(w, 7))}
@@ -106,14 +110,7 @@ export function ScheduleScreen() {
           </Card>
         </Section>
 
-        <Pressable
-          onPress={() => setCreating(true)}
-          style={({ pressed }) => [styles.newEvent, pressed && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel="New event"
-        >
-          <Text style={[type.label, styles.newEventText]}>+ New event</Text>
-        </Pressable>
+        <AddAction label="New event" onPress={() => setCreating(true)} />
       </ScrollView>
 
       <EventForm
@@ -173,19 +170,8 @@ const styles = StyleSheet.create({
   weekCard: { gap: spacing.sm },
   weekNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 4 },
   weekRange: { color: colors.text },
-  weekRangeLink: { color: colors.accent },
   dayDivider: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: 4, paddingTop: 4 },
   upcomingDivider: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: 4, paddingTop: 4 },
   muted: { color: colors.textMuted },
-  newEvent: {
-    height: 48,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  newEventText: { color: colors.accent },
   pressed: { opacity: 0.7 },
 });

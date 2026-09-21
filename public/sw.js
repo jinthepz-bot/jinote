@@ -8,7 +8,7 @@
 // Online, you always get the latest deploy; offline, you get whatever last loaded
 // successfully. The cache fills itself the first time each asset is fetched, so the app
 // works offline after that first visit, without a separate build step to populate it.
-const CACHE_NAME = 'jinesist-v1';
+const CACHE_NAME = 'jinote-v1';
 
 self.addEventListener('install', () => {
   self.skipWaiting();
@@ -30,6 +30,6 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
         return response;
       })
-      .catch(() => caches.match(request).then((cached) => cached || caches.match('/')))
+      .catch(() => caches.match(request).then((cached) => cached || caches.match(self.registration.scope)))
   );
 });

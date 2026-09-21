@@ -1,19 +1,22 @@
 import { useState } from 'react';
 import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import type { LogEntry } from '../coach/store';
+import type { GoalType, LogEntry } from '../coach/store';
+import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
-import { colors, radius } from '../design/theme';
+import { colors, radius, sizes, spacing, keyboardAppearance } from '../design/theme';
 import { Card } from '../design/ui';
 
 interface Props {
+  goalType: GoalType;
   unit: string;
-  todayEntry?: LogEntry;
+  todayEntries: LogEntry[];
   onLog: (count: number, note: string) => { isNewBest: boolean };
 }
 
-export function QuickLog({ unit, todayEntry, onLog }: Props) {
+export function QuickLog({ goalType, unit, todayEntries, onLog }: Props) {
   const type = useType();
+  const accent = useAccent();
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [saved, setSaved] = useState<{ isNewBest: boolean } | null>(null);
@@ -45,7 +48,7 @@ export function QuickLog({ unit, todayEntry, onLog }: Props) {
           maxLength={4}
           placeholder="0"
           placeholderTextColor={colors.textMuted}
-          keyboardAppearance="dark"
+          keyboardAppearance={keyboardAppearance}
           accessibilityLabel={`Amount in ${unit}`}
         />
         <TextInput
@@ -54,62 +57,73 @@ export function QuickLog({ unit, todayEntry, onLog }: Props) {
           onChangeText={edit(setNote)}
           placeholder="Note (optional)"
           placeholderTextColor={colors.textMuted}
-          keyboardAppearance="dark"
+          keyboardAppearance={keyboardAppearance}
           returnKeyType="done"
           onSubmitEditing={submit}
           accessibilityLabel="Note"
         />
         <Pressable
-          style={({ pressed }) => [styles.button, !valid && styles.buttonDisabled, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.button,
+            { backgroundColor: accent.accent },
+            !valid && styles.buttonDisabled,
+            pressed && styles.pressed,
+          ]}
           onPress={submit}
           disabled={!valid}
           accessibilityRole="button"
         >
-          <Text style={[type.label, styles.buttonText]}>Log it</Text>
+          <Text style={[type.label, styles.buttonText, { color: accent.onAccent }]}>Log it</Text>
         </Pressable>
       </View>
 
       <View style={styles.status}>
-        <Text style={[type.mono, todayEntry && styles.todayText]}>
-          {todayEntry
-            ? `Today: ${todayEntry.value} ${unit}${todayEntry.note ? ` · ${todayEntry.note}` : ''}`
-            : 'Nothing logged today'}
-        </Text>
-        {saved ? (
-          <Text style={[type.mono, styles.saved]}>{saved.isNewBest ? 'Saved · New best set!' : 'Saved'}</Text>
-        ) : todayEntry ? (
-          <Text style={type.mono}>Logging again replaces today's entry.</Text>
-        ) : null}
+        <Text style={[type.mono, todayEntries.length > 0 && styles.todayText]}>{describeToday(goalType, unit, todayEntries)}</Text>
+        {saved ? <Text style={[type.mono, styles.saved]}>{saved.isNewBest ? 'Saved · New best set!' : 'Saved'}</Text> : null}
       </View>
     </Card>
   );
 }
 
+// "Nothing logged today", or a best-result goal's individual sets ("20 + 15 + 10 =
+// 45 reps") so today's sets stay visible at a glance, or a cumulative goal's simple
+// running total for the day.
+function describeToday(goalType: GoalType, unit: string, todayEntries: LogEntry[]): string {
+  if (todayEntries.length === 0) return 'Nothing logged today';
+  const total = todayEntries.reduce((sum, e) => sum + e.value, 0);
+  if (goalType !== 'best') {
+    // Matches the single-entry text this used to show: the first entry logged today.
+    const note = todayEntries[0]?.note;
+    return `Today: ${total} ${unit}${note ? ` · ${note}` : ''}`;
+  }
+  const sets = todayEntries.map((e) => e.value).join(' + ');
+  return todayEntries.length > 1 ? `Today: ${sets} = ${total} ${unit}` : `Today: ${total} ${unit}`;
+}
+
 const styles = StyleSheet.create({
-  card: { gap: 10 },
-  row: { flexDirection: 'row', gap: 8 },
+  card: { gap: spacing.md },
+  row: { flexDirection: 'row', gap: spacing.sm },
   input: {
-    height: 46,
+    height: sizes.control,
     backgroundColor: colors.surface2,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.control,
-    paddingHorizontal: 10,
+    paddingHorizontal: spacing.md,
     color: colors.text,
   },
   amount: { width: 64, fontSize: 24, textAlign: 'center' },
   note: { flex: 1, minWidth: 0 },
   button: {
-    height: 46,
-    paddingHorizontal: 14,
+    height: sizes.control,
+    paddingHorizontal: spacing.lg,
     borderRadius: radius.control,
-    backgroundColor: colors.accent,
     justifyContent: 'center',
   },
   buttonDisabled: { opacity: 0.45 },
   pressed: { opacity: 0.8 },
-  buttonText: { color: colors.onAccent, fontSize: 12 },
-  status: { gap: 2 },
+  buttonText: { fontSize: 12 },
+  status: { gap: spacing.xs / 2 },
   todayText: { color: colors.text },
   saved: { color: colors.success },
 });

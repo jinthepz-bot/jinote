@@ -3,13 +3,15 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { confirmDestructive } from '../design/confirm';
+import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
-import { colors, radius } from '../design/theme';
-import { Card, IconButton } from '../design/ui';
+import { colors, radius, sizes, spacing, keyboardAppearance } from '../design/theme';
+import { Card, Checkbox, IconButton, RowIconButton } from '../design/ui';
 import { addChecklistItem, deleteChecklistItem, deleteNote, toggleChecklistItem, type ChecklistNote } from './store';
 
 export function ChecklistCard({ note }: { note: ChecklistNote }) {
   const type = useType();
+  const accent = useAccent();
   const [draft, setDraft] = useState('');
   const canAdd = draft.trim() !== '';
   const doneCount = note.items.filter((i) => i.done).length;
@@ -46,32 +48,22 @@ export function ChecklistCard({ note }: { note: ChecklistNote }) {
       ) : (
         note.items.map((item, i) => (
           <View key={item.id} style={[styles.row, i > 0 && styles.divider]}>
-            <Pressable
+            <Checkbox
+              checked={item.done}
               onPress={() => toggleChecklistItem(note.id, item.id)}
-              hitSlop={10}
-              style={[styles.checkbox, item.done && styles.checked]}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: item.done }}
-              aria-checked={item.done}
-              accessibilityLabel={item.text}
-            >
-              {item.done ? <Ionicons name="checkmark" size={15} color={colors.onAccent} /> : null}
-            </Pressable>
+              label={item.text}
+            />
             <Text
               style={[type.body, styles.itemText, item.done && styles.itemDone]}
               onPress={() => toggleChecklistItem(note.id, item.id)}
             >
               {item.text}
             </Text>
-            <Pressable
+            <RowIconButton
+              icon="trash-outline"
+              label={`Delete item "${item.text}"`}
               onPress={() => deleteChecklistItem(note.id, item.id)}
-              hitSlop={10}
-              style={({ pressed }) => [styles.delete, pressed && styles.pressed]}
-              accessibilityRole="button"
-              accessibilityLabel={`Delete item "${item.text}"`}
-            >
-              <Ionicons name="close" size={16} color={colors.textMuted} />
-            </Pressable>
+            />
           </View>
         ))
       )}
@@ -83,7 +75,7 @@ export function ChecklistCard({ note }: { note: ChecklistNote }) {
           onChangeText={setDraft}
           placeholder="Add an item"
           placeholderTextColor={colors.textMuted}
-          keyboardAppearance="dark"
+          keyboardAppearance={keyboardAppearance}
           returnKeyType="done"
           onSubmitEditing={add}
           submitBehavior="submit"
@@ -92,11 +84,16 @@ export function ChecklistCard({ note }: { note: ChecklistNote }) {
         <Pressable
           onPress={add}
           disabled={!canAdd}
-          style={({ pressed }) => [styles.addButton, !canAdd && styles.disabled, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.addButton,
+            { backgroundColor: accent.accent },
+            !canAdd && styles.disabled,
+            pressed && styles.pressed,
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Add item"
         >
-          <Ionicons name="add" size={20} color={colors.onAccent} />
+          <Ionicons name="add" size={22} color={accent.onAccent} />
         </Pressable>
       </View>
     </Card>
@@ -104,43 +101,31 @@ export function ChecklistCard({ note }: { note: ChecklistNote }) {
 }
 
 const styles = StyleSheet.create({
-  card: { gap: 8 },
-  header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  card: { gap: spacing.sm },
+  header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   empty: { color: colors.textMuted },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
   divider: { borderTopWidth: 1, borderTopColor: colors.border },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    borderColor: colors.textMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checked: { backgroundColor: colors.success, borderColor: colors.success },
   itemText: { flex: 1 },
   itemDone: { color: colors.textMuted, textDecorationLine: 'line-through' },
-  delete: { padding: 2 },
   pressed: { opacity: 0.6 },
-  addRow: { flexDirection: 'row', gap: 8, marginTop: 2 },
+  addRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   input: {
     flex: 1,
     minWidth: 0,
-    height: 38,
+    height: sizes.control,
     backgroundColor: colors.surface2,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.control,
-    paddingHorizontal: 10,
+    paddingHorizontal: spacing.md,
     color: colors.text,
   },
   addButton: {
-    width: 38,
-    height: 38,
+    width: sizes.control,
+    height: sizes.control,
     borderRadius: radius.control,
-    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },

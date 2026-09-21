@@ -5,8 +5,9 @@ import { describeDayDistance, formatDayKey } from '../coach/days';
 import { confirmDestructive } from '../design/confirm';
 import { useType } from '../design/fonts';
 import { Sheet } from '../design/Sheet';
-import { colors, radius, spacing } from '../design/theme';
-import { Button, fieldStyles } from '../design/ui';
+import { colors, radius, spacing, type AccentPalette, keyboardAppearance } from '../design/theme';
+import { useAccent } from '../design/accent';
+import { Button, Chip, fieldStyles, Segmented } from '../design/ui';
 import { MonthCalendar } from '../home/MonthCalendar';
 import { EVENT_COLORS, type EventColor, type EventType, type NewEventInput, type ScheduleEvent } from './store';
 import { isTimeKey, sanitizeTimeInput } from './time';
@@ -43,6 +44,12 @@ const WEEKDAY_CHIPS: { value: number; label: string }[] = [
   { value: 6, label: 'S' },
   { value: 0, label: 'S' },
 ];
+
+function eventColorDot(color: EventColor, accent: AccentPalette): string {
+  if (color === 'accent') return accent.accent;
+  if (color === 'soft') return accent.accentSoft;
+  return color === 'strong' ? colors.accentStrong : colors.success;
+}
 
 const COLOR_LABELS: Record<EventColor, string> = {
   accent: 'Amber',
@@ -92,6 +99,7 @@ function DateField({
   onChange: (day: string | null) => void;
 }) {
   const type = useType();
+  const accent = useAccent();
   const [open, setOpen] = useState(false);
   return (
     <Field label={label}>
@@ -110,7 +118,7 @@ function DateField({
           accessibilityRole="button"
           accessibilityLabel={open ? `Hide ${label} calendar` : `Pick ${label}`}
         >
-          <Text style={[type.label, styles.pickText]}>{open ? 'Hide' : value ? 'Change' : 'Pick'}</Text>
+          <Text style={[type.label, { color: accent.accent }]}>{open ? 'Hide' : value ? 'Change' : 'Pick'}</Text>
         </Pressable>
       </View>
       {open ? (
@@ -129,6 +137,7 @@ function DateField({
 
 function FormBody({ todayKey, editing, onCancel, onSave, onDelete }: Omit<Props, 'visible'>) {
   const type = useType();
+  const accent = useAccent();
   const [title, setTitle] = useState(editing?.title ?? '');
   const [eventType, setEventType] = useState<EventType>(editing?.type ?? 'recurring');
   const [days, setDays] = useState<number[]>(editing?.days ?? []);
@@ -191,31 +200,14 @@ function FormBody({ todayKey, editing, onCancel, onSave, onDelete }: Omit<Props,
           onChangeText={setTitle}
           placeholder="e.g. German A2"
           placeholderTextColor={colors.textMuted}
-          keyboardAppearance="dark"
+          keyboardAppearance={keyboardAppearance}
           autoFocus
           accessibilityLabel="Event title"
         />
       </Field>
 
       <Field label="Type">
-        <View style={styles.segment} accessibilityRole="radiogroup">
-          {TYPES.map((option) => {
-            const selected = option.value === eventType;
-            return (
-              <Pressable
-                key={option.value}
-                style={[styles.segmentOption, selected && styles.segmentSelected]}
-                onPress={() => setEventType(option.value)}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: selected }}
-                aria-checked={selected}
-                accessibilityLabel={option.label}
-              >
-                <Text style={[type.label, selected && styles.segmentTextSelected]}>{option.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <Segmented options={TYPES} value={eventType} onChange={setEventType} />
         <Text style={type.mono}>{TYPES.find((t) => t.value === eventType)!.hint}</Text>
       </Field>
 
@@ -223,22 +215,17 @@ function FormBody({ todayKey, editing, onCancel, onSave, onDelete }: Omit<Props,
         <>
           <Field label="Days">
             <View style={styles.weekdays} accessibilityRole="none">
-              {WEEKDAY_CHIPS.map(({ value, label }, i) => {
-                const selected = days.includes(value);
-                return (
-                  <Pressable
-                    key={`${value}-${i}`}
-                    onPress={() => toggleDay(value)}
-                    style={[styles.dayChip, selected && styles.dayChipSelected]}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: selected }}
-                    aria-checked={selected}
-                    accessibilityLabel={`Toggle ${label}`}
-                  >
-                    <Text style={[type.label, selected && styles.dayChipTextSelected]}>{label}</Text>
-                  </Pressable>
-                );
-              })}
+              {WEEKDAY_CHIPS.map(({ value, label }, i) => (
+                <Chip
+                  key={`${value}-${i}`}
+                  label={label}
+                  selected={days.includes(value)}
+                  onPress={() => toggleDay(value)}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel={`Toggle ${label}`}
+                  style={styles.dayChip}
+                />
+              ))}
             </View>
           </Field>
           <DateField label="Starts (optional)" value={startDate} todayKey={todayKey} required={false} onChange={setStartDate} />
@@ -257,7 +244,7 @@ function FormBody({ todayKey, editing, onCancel, onSave, onDelete }: Omit<Props,
             placeholder="10:15"
             placeholderTextColor={colors.textMuted}
             keyboardType="number-pad"
-            keyboardAppearance="dark"
+            keyboardAppearance={keyboardAppearance}
             accessibilityLabel="Start time"
           />
         </Field>
@@ -269,7 +256,7 @@ function FormBody({ todayKey, editing, onCancel, onSave, onDelete }: Omit<Props,
             placeholder="11:45"
             placeholderTextColor={colors.textMuted}
             keyboardType="number-pad"
-            keyboardAppearance="dark"
+            keyboardAppearance={keyboardAppearance}
             accessibilityLabel="End time"
           />
         </Field>
@@ -283,13 +270,13 @@ function FormBody({ todayKey, editing, onCancel, onSave, onDelete }: Omit<Props,
               <Pressable
                 key={option}
                 onPress={() => setColor(option)}
-                style={[styles.colorOption, selected && styles.colorOptionSelected]}
+                style={[styles.colorOption, selected && { backgroundColor: colors.surface2, borderColor: accent.accent }]}
                 accessibilityRole="radio"
                 accessibilityState={{ checked: selected }}
                 accessibilityLabel={COLOR_LABELS[option]}
               >
-                <View style={[styles.colorDot, styles[`color_${option}`]]} />
-                <Text style={[type.label, selected && styles.colorTextSelected]}>{COLOR_LABELS[option]}</Text>
+                <View style={[styles.colorDot, { backgroundColor: eventColorDot(option, accent) }]} />
+                <Text style={[type.label, selected && { color: accent.accent }]}>{COLOR_LABELS[option]}</Text>
               </Pressable>
             );
           })}
@@ -303,7 +290,7 @@ function FormBody({ todayKey, editing, onCancel, onSave, onDelete }: Omit<Props,
           onChangeText={setLocation}
           placeholder="e.g. HS 5"
           placeholderTextColor={colors.textMuted}
-          keyboardAppearance="dark"
+          keyboardAppearance={keyboardAppearance}
           accessibilityLabel="Location"
         />
       </Field>
@@ -315,29 +302,22 @@ function FormBody({ todayKey, editing, onCancel, onSave, onDelete }: Omit<Props,
           onChangeText={setNote}
           placeholder="Anything else worth remembering"
           placeholderTextColor={colors.textMuted}
-          keyboardAppearance="dark"
+          keyboardAppearance={keyboardAppearance}
           accessibilityLabel="Note"
         />
       </Field>
 
       <Field label="Remind me before it starts">
         <View style={styles.reminderOptions} accessibilityRole="radiogroup">
-          {REMINDER_OPTIONS.map((option) => {
-            const selected = option.value === reminderMinutesBefore;
-            return (
-              <Pressable
-                key={String(option.value)}
-                style={[styles.reminderChip, selected && styles.segmentSelected]}
-                onPress={() => setReminderMinutesBefore(option.value)}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: selected }}
-                aria-checked={selected}
-                accessibilityLabel={`Remind me ${option.label === 'None' ? 'never' : option.label + ' before'}`}
-              >
-                <Text style={[type.label, selected && styles.segmentTextSelected]}>{option.label}</Text>
-              </Pressable>
-            );
-          })}
+          {REMINDER_OPTIONS.map((option) => (
+            <Chip
+              key={String(option.value)}
+              label={option.label}
+              selected={option.value === reminderMinutesBefore}
+              onPress={() => setReminderMinutesBefore(option.value)}
+              accessibilityLabel={`Remind me ${option.label === 'None' ? 'never' : option.label + ' before'}`}
+            />
+          ))}
         </View>
       </Field>
 
@@ -358,44 +338,13 @@ function FormBody({ todayKey, editing, onCancel, onSave, onDelete }: Omit<Props,
 
 const styles = StyleSheet.create({
   heading: { fontSize: 34, lineHeight: 38, letterSpacing: 1 },
-  field: { gap: 6 },
-  segment: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.control,
-    padding: 3,
-  },
-  segmentOption: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: radius.control - 2 },
-  segmentSelected: { backgroundColor: colors.accent },
-  segmentTextSelected: { color: colors.onAccent },
-  reminderOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  reminderChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: radius.control,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface2,
-  },
-  weekdays: { flexDirection: 'row', gap: 6 },
-  dayChip: {
-    flex: 1,
-    height: 36,
-    borderRadius: radius.control,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dayChipSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
-  dayChipTextSelected: { color: colors.onAccent },
+  field: { gap: spacing.sm },
+  reminderOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  weekdays: { flexDirection: 'row', gap: spacing.sm },
+  dayChip: { flex: 1, minWidth: 0, paddingHorizontal: 0 },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 28 },
   dateText: { flex: 1, color: colors.text },
   clearText: { color: colors.accentStrong },
-  pickText: { color: colors.accent },
   timeRow: { flexDirection: 'row', gap: spacing.md },
   // Flexbox children default to a min-width based on their unwrapped content, which let
   // "End time (optional)" push past the sheet's edge on a narrow phone instead of
@@ -403,15 +352,9 @@ const styles = StyleSheet.create({
   timeField: { flex: 1, minWidth: 0 },
   timeInput: { flex: 1 },
   invalid: { borderColor: colors.accentStrong },
-  colorOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  colorOption: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 8, borderRadius: radius.control, borderWidth: 1, borderColor: colors.border },
-  colorOptionSelected: { backgroundColor: colors.surface2, borderColor: colors.accent },
-  colorTextSelected: { color: colors.accent },
+  colorOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  colorOption: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: radius.control, borderWidth: 1, borderColor: colors.border },
   colorDot: { width: 12, height: 12, borderRadius: 6 },
-  color_accent: { backgroundColor: colors.accent },
-  color_soft: { backgroundColor: colors.accentSoft },
-  color_strong: { backgroundColor: colors.accentStrong },
-  color_success: { backgroundColor: colors.success },
   actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs },
   actionsStart: { flex: 1, alignItems: 'flex-start' },
   deleteText: { color: colors.accentStrong },

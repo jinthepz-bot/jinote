@@ -6,7 +6,8 @@ import type { Task, TaskEdit } from '../coach/store';
 import { confirmDestructive } from '../design/confirm';
 import { useType } from '../design/fonts';
 import { Sheet } from '../design/Sheet';
-import { colors, spacing } from '../design/theme';
+import { colors, spacing, keyboardAppearance } from '../design/theme';
+import { useAccent } from '../design/accent';
 import { Button, fieldStyles } from '../design/ui';
 import { isTimeKey, sanitizeTimeInput } from '../schedule/time';
 import { MonthCalendar } from './MonthCalendar';
@@ -41,6 +42,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 function FormBody({ todayKey, editing, initialText, onCancel, onSave, onDelete }: Omit<Props, 'visible'>) {
   const type = useType();
+  const accent = useAccent();
   const [text, setText] = useState(editing?.text ?? initialText ?? '');
   const [date, setDate] = useState<string | null>(editing?.date ?? null);
   const [time, setTime] = useState(editing?.time ?? '');
@@ -74,7 +76,7 @@ function FormBody({ todayKey, editing, initialText, onCancel, onSave, onDelete }
           onChangeText={setText}
           placeholder="e.g. Email my professor"
           placeholderTextColor={colors.textMuted}
-          keyboardAppearance="dark"
+          keyboardAppearance={keyboardAppearance}
           autoFocus
           accessibilityLabel="Task text"
         />
@@ -104,7 +106,7 @@ function FormBody({ todayKey, editing, initialText, onCancel, onSave, onDelete }
             accessibilityRole="button"
             accessibilityLabel={calendarOpen ? 'Hide calendar' : 'Pick date'}
           >
-            <Text style={[type.label, styles.pickText]}>{calendarOpen ? 'Hide' : date ? 'Change' : 'Pick'}</Text>
+            <Text style={[type.label, { color: accent.accent }]}>{calendarOpen ? 'Hide' : date ? 'Change' : 'Pick'}</Text>
           </Pressable>
         </View>
         {calendarOpen ? (
@@ -128,7 +130,7 @@ function FormBody({ todayKey, editing, initialText, onCancel, onSave, onDelete }
             placeholder="14:00"
             placeholderTextColor={colors.textMuted}
             keyboardType="number-pad"
-            keyboardAppearance="dark"
+            keyboardAppearance={keyboardAppearance}
             accessibilityLabel="Task time"
           />
         </Field>
@@ -155,11 +157,10 @@ function FormBody({ todayKey, editing, initialText, onCancel, onSave, onDelete }
 
 const styles = StyleSheet.create({
   heading: { fontSize: 34, lineHeight: 38, letterSpacing: 1 },
-  field: { gap: 6 },
+  field: { gap: spacing.sm },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 28 },
   dateText: { flex: 1, color: colors.text },
   clearText: { color: colors.accentStrong },
-  pickText: { color: colors.accent },
   timeInput: { width: 110 },
   invalid: { borderColor: colors.accentStrong },
   hint: { color: colors.textMuted },

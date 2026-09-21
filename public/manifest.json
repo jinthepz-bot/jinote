@@ -1,13 +1,13 @@
 {
-  "name": "Jinesist",
-  "short_name": "Jinesist",
+  "name": "Jinote",
+  "short_name": "Jinote",
   "description": "A personal accountability coach for your phone.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#1c1a17",
-  "theme_color": "#c98a3b",
+  "background_color": "#F4EEE2",
+  "theme_color": "#B4502A",
   "lang": "en",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },

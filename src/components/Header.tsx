@@ -1,7 +1,8 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
-import { colors, spacing } from '../design/theme';
+import { colors, radius, spacing } from '../design/theme';
 import type { Activity } from '../types';
 
 interface Props {
@@ -9,34 +10,46 @@ interface Props {
   mock: boolean;
   canClear: boolean;
   onClear: () => void;
+  action?: React.ReactNode; // the shared top-right screen control (Settings)
+  compact?: boolean; // the desktop coach panel: a smaller headline
 }
 
-export function Header({ activity, mock, canClear, onClear }: Props) {
+export function Header({ activity, mock, canClear, onClear, action, compact }: Props) {
   const type = useType();
+  const accent = useAccent();
   const busy = activity.kind !== 'idle';
 
   return (
     <View style={styles.header}>
       <View style={styles.statusRow}>
         {busy ? (
-          <ActivityIndicator size="small" color={colors.accent} style={styles.spinner} />
+          <ActivityIndicator size="small" color={accent.accent} style={styles.spinner} />
         ) : (
           <View style={styles.dot} />
         )}
-        <Text style={[type.label, busy && styles.busyText]}>{busy ? 'Thinking...' : 'Your coach'}</Text>
+        <Text style={[type.label, styles.statusText, busy && { color: accent.accent }]} numberOfLines={1}>
+          {busy ? 'Thinking...' : 'Your coach'}
+        </Text>
+        {mock ? (
+          <Text
+            style={[
+              type.label,
+              styles.mockBadge,
+              { color: accent.accent, backgroundColor: accent.accentSoft, borderColor: accent.accent },
+            ]}
+          >
+            Mock
+          </Text>
+        ) : null}
+        <Pressable onPress={onClear} disabled={!canClear} hitSlop={10} accessibilityRole="button">
+          <Text style={[type.label, { color: canClear ? accent.accent : colors.border }]}>Clear</Text>
+        </Pressable>
+        {action}
       </View>
 
-      <View style={styles.titleRow}>
-        <View style={styles.titleGroup}>
-          <Text style={[type.display, styles.title]} accessibilityRole="header">
-            CHAT
-          </Text>
-          {mock ? <Text style={[type.label, styles.mockBadge]}>Mock</Text> : null}
-        </View>
-        <Pressable onPress={onClear} disabled={!canClear} hitSlop={10} accessibilityRole="button">
-          <Text style={[type.label, styles.clear, !canClear && styles.clearDisabled]}>Clear</Text>
-        </Pressable>
-      </View>
+      <Text style={[type.display, styles.title, compact && styles.titleCompact]} numberOfLines={1} adjustsFontSizeToFit accessibilityRole="header">
+        CHAT
+      </Text>
     </View>
   );
 }
@@ -44,30 +57,26 @@ export function Header({ activity, mock, canClear, onClear }: Props) {
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
+    paddingTop: spacing.lg,
     paddingBottom: spacing.md,
     backgroundColor: colors.background,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    gap: spacing.xs,
   },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 18 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 28 },
+  statusText: { flex: 1 },
   spinner: { transform: [{ scale: 0.6 }], width: 8, marginHorizontal: -2 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success },
-  busyText: { color: colors.accent },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  titleGroup: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  title: { fontSize: 44, lineHeight: 50, letterSpacing: 1.5 },
   mockBadge: {
     fontSize: 10,
-    color: colors.accent,
-    backgroundColor: colors.accentSoft,
     borderWidth: 1,
-    borderColor: colors.accent,
-    paddingHorizontal: 6,
+    paddingHorizontal: spacing.xs + 2,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: radius.square,
     overflow: 'hidden',
   },
-  clear: { color: colors.accent },
-  clearDisabled: { color: colors.border },
+  // Matches ScreenTitle's headline on the other screens.
+  title: { fontSize: 56, lineHeight: 62, letterSpacing: 1.5 },
+  titleCompact: { fontSize: 32, lineHeight: 38, letterSpacing: 0 },
 });

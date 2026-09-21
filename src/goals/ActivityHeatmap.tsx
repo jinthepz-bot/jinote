@@ -4,7 +4,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatDayKey, MONTHS_SHORT, parseDayKey } from '../coach/days';
 import { HEATMAP_LEVELS, type Heatmap, type HeatmapDay } from '../coach/stats';
 import { useType } from '../design/fonts';
-import { accentScale, colors } from '../design/theme';
+import { useAccent } from '../design/accent';
+import { colors } from '../design/theme';
 import { Card } from '../design/ui';
 
 // Weekday gutter: only every other row is labelled, like GitHub's graph.
@@ -12,9 +13,9 @@ const ROW_LABELS = ['M', '', 'W', '', 'F', '', ''];
 
 const monthOf = (key: string) => parseDayKey(key)!.month;
 
-function fill(day: HeatmapDay): string | undefined {
+function fill(day: HeatmapDay, scale: string[]): string | undefined {
   if (day.future) return undefined; // nothing drawn: the cell only holds the column's shape
-  return day.level === 0 ? colors.surface2 : accentScale[day.level - 1];
+  return day.level === 0 ? colors.surface2 : scale[day.level - 1];
 }
 
 interface Props {
@@ -27,6 +28,7 @@ interface Props {
 // to Sunday, shaded by that day's total against the best day on show.
 export function ActivityHeatmap({ heatmap, todayKey, unit }: Props) {
   const type = useType();
+  const accent = useAccent();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const { weeks, max } = heatmap;
@@ -75,7 +77,7 @@ export function ActivityHeatmap({ heatmap, todayKey, unit }: Props) {
                   <View
                     style={[
                       styles.square,
-                      { backgroundColor: fill(day) },
+                      { backgroundColor: fill(day, accent.scale) },
                       day.isToday && styles.today,
                       day.key === selected?.key && styles.selected,
                     ]}
@@ -92,7 +94,7 @@ export function ActivityHeatmap({ heatmap, todayKey, unit }: Props) {
           <Text style={[type.mono, styles.legendText]}>Less</Text>
           <View style={[styles.legendSquare, { backgroundColor: colors.surface2 }]} />
           {Array.from({ length: HEATMAP_LEVELS }, (_, i) => (
-            <View key={i} style={[styles.legendSquare, { backgroundColor: accentScale[i] }]} />
+            <View key={i} style={[styles.legendSquare, { backgroundColor: accent.scale[i] }]} />
           ))}
           <Text style={[type.mono, styles.legendText]}>More</Text>
         </View>
@@ -104,7 +106,7 @@ export function ActivityHeatmap({ heatmap, todayKey, unit }: Props) {
             <Text style={[type.bodyStrong, styles.detailHead]} numberOfLines={1}>
               {formatDayKey(selected.key, todayKey)}
               {' · '}
-              <Text style={selected.total > 0 ? styles.detailValue : styles.muted}>
+              <Text style={selected.total > 0 ? { color: accent.accent } : styles.muted}>
                 {selected.total > 0 ? `${selected.total} ${unit}` : 'nothing logged'}
               </Text>
             </Text>
@@ -150,7 +152,7 @@ const styles = StyleSheet.create({
     minHeight: 40,
   },
   detailHead: { color: colors.textMuted },
-  detailValue: { color: colors.accent },
+  detailValue: {},
   note: { color: colors.text },
   muted: { color: colors.textMuted },
 });

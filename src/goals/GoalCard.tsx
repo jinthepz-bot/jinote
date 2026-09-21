@@ -4,8 +4,9 @@ import { formatDayKey } from '../coach/days';
 import { formatAmount } from '../coach/format';
 import { deadlineStatus, goalProgress } from '../coach/stats';
 import type { Goal } from '../coach/store';
+import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
-import { colors } from '../design/theme';
+import { colors, spacing } from '../design/theme';
 import { Button, Card, IconButton } from '../design/ui';
 
 interface Props {
@@ -30,6 +31,7 @@ function describeDeadline(goal: Goal, todayKey: string, done: boolean): { text: 
 
 export function GoalCard({ goal, todayKey, onLog, onEditDeadline, onSetFeatured, onDelete }: Props) {
   const type = useType();
+  const accent = useAccent();
   const { percent, done } = goalProgress(goal);
   const deadline = describeDeadline(goal, todayKey, done);
   const unit = goal.unit ? ` ${goal.unit}` : '';
@@ -58,14 +60,14 @@ export function GoalCard({ goal, todayKey, onLog, onEditDeadline, onSetFeatured,
       </View>
 
       <View style={styles.track} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: percent }}>
-        <View style={[styles.fill, { width: `${percent}%` }, done && styles.fillDone]} />
+        <View style={[styles.fill, { width: `${percent}%`, backgroundColor: accent.accent }, done && styles.fillDone]} />
       </View>
 
       <View style={styles.meta}>
         <Text style={[type.mono, styles.deadline, deadline.warn && styles.warn]} numberOfLines={1}>
           {deadline.text}
         </Text>
-        <Text style={[type.mono, styles.percent, done && styles.doneText]}>{percent}%</Text>
+        <Text style={[type.mono, { color: accent.accent }, done && styles.doneText]}>{percent}%</Text>
       </View>
 
       <View style={styles.actions}>
@@ -74,7 +76,7 @@ export function GoalCard({ goal, todayKey, onLog, onEditDeadline, onSetFeatured,
           <IconButton
             icon={goal.featured ? 'star' : 'star-outline'}
             label={goal.featured ? `Currently focused: ${goal.title}` : `Make ${goal.title} my focus`}
-            color={goal.featured ? colors.accent : colors.textMuted}
+            color={goal.featured ? accent.accent : colors.textMuted}
             onPress={onSetFeatured}
           />
         ) : null}
@@ -87,7 +89,7 @@ export function GoalCard({ goal, todayKey, onLog, onEditDeadline, onSetFeatured,
 }
 
 const styles = StyleSheet.create({
-  card: { gap: 10 },
+  card: { gap: spacing.md },
   top: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   titleBlock: { flex: 1, gap: 2 },
   numbers: { alignItems: 'flex-end', maxWidth: '45%' },
@@ -100,12 +102,11 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     overflow: 'hidden',
   },
-  fill: { height: '100%', backgroundColor: colors.accent },
+  fill: { height: '100%' },
   fillDone: { backgroundColor: colors.success },
   meta: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   deadline: { flex: 1 },
   warn: { color: colors.accentStrong },
-  percent: { color: colors.accent },
   doneText: { color: colors.success },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   spacer: { flex: 1 },

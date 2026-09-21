@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useType } from '../design/fonts';
-import { colors } from '../design/theme';
+import { colors, spacing } from '../design/theme';
 import { Card } from '../design/ui';
 
 interface Props {
@@ -64,7 +64,7 @@ const styles = StyleSheet.create({
   // Tiles share the row evenly but never squeeze below a readable width: past four
   // per row (a phone), the row wraps instead.
   slot: { flexGrow: 1, flexBasis: 120, minWidth: 0 },
-  tile: { flex: 1, paddingHorizontal: 10, paddingVertical: 10, gap: 4 },
+  tile: { flex: 1, paddingHorizontal: spacing.md, paddingVertical: spacing.md, gap: 4 },
   pressed: { opacity: 0.75 },
   labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4 },
   label: { flexShrink: 1, fontSize: 10, letterSpacing: 0.8 },

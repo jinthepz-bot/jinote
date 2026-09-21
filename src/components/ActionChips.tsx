@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { useType } from '../design/fonts';
-import { colors } from '../design/theme';
+import { colors, spacing } from '../design/theme';
 import type { ActionKind, ActionRecord } from '../types';
 
 const GLYPHS: Record<ActionKind, string> = {
@@ -45,8 +45,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.success,
     borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   glyph: { width: 16, fontSize: 13, lineHeight: 18, color: colors.success },
   label: { flexShrink: 1, fontSize: 13, lineHeight: 18 },

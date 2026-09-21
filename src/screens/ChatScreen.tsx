@@ -8,8 +8,10 @@ import { MessageBubble, ThinkingBubble } from '../components/MessageBubble';
 import { TaskCard } from '../components/TaskCard';
 import { useMock } from '../config';
 import { confirmDestructive } from '../design/confirm';
+import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
 import { colors, radius, spacing } from '../design/theme';
+import { SettingsButton } from '../navigation/SettingsHost';
 import type { AppMessage } from '../types';
 import { useAgentChat } from '../useAgentChat';
 
@@ -17,6 +19,7 @@ const EXAMPLES = ['Log 24 push-ups', 'Remind me to email my professor', "I skipp
 
 function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   const type = useType();
+  const accent = useAccent();
   return (
     <View style={styles.empty}>
       <Text style={[type.display, styles.emptyTitle]}>TALK TO YOUR COACH</Text>
@@ -31,14 +34,16 @@ function EmptyState({ onPick }: { onPick: (text: string) => void }) {
           onPress={() => onPick(example)}
           accessibilityRole="button"
         >
-          <Text style={[type.body, styles.exampleText]}>{example}</Text>
+          <Text style={[type.body, { color: accent.accent }]}>{example}</Text>
         </Pressable>
       ))}
     </View>
   );
 }
 
-export function ChatScreen() {
+// `embedded` is the desktop coach panel: no safe-area padding, no Settings gear
+// (the sidebar has one), and a compact header. The chat logic is the same hook.
+export function ChatScreen({ embedded = false }: { embedded?: boolean }) {
   const { messages, activity, loaded, send, stop, clear } = useAgentChat();
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<AppMessage>>(null);
@@ -52,8 +57,15 @@ export function ChatScreen() {
     });
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
-      <Header activity={activity} mock={useMock} canClear={messages.length > 0} onClear={confirmClear} />
+    <View style={[styles.root, { paddingTop: embedded ? 0 : insets.top }]}>
+      <Header
+        activity={activity}
+        mock={useMock}
+        canClear={messages.length > 0}
+        onClear={confirmClear}
+        action={embedded ? undefined : <SettingsButton />}
+        compact={embedded}
+      />
       <KeyboardAvoidingView style={styles.flex} behavior="padding">
         <FlatList
           ref={listRef}
@@ -78,19 +90,18 @@ export function ChatScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
-  list: { flexGrow: 1, padding: spacing.lg },
-  empty: { flex: 1, justifyContent: 'center', gap: 10 },
+  list: { flexGrow: 1, padding: spacing.lg, width: '100%', maxWidth: 560, alignSelf: 'center' },
+  empty: { flex: 1, justifyContent: 'center', gap: spacing.md },
   emptyTitle: { fontSize: 38, lineHeight: 42, letterSpacing: 1 },
   emptyBody: { color: colors.textMuted },
-  examplesLabel: { marginTop: spacing.md },
+  examplesLabel: { marginTop: spacing.xs },
   example: {
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.card,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  exampleText: { color: colors.accent },
   pressed: { opacity: 0.7 },
 });

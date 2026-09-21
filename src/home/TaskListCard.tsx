@@ -3,9 +3,10 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { Task } from '../coach/store';
+import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
-import { colors, radius } from '../design/theme';
-import { Card } from '../design/ui';
+import { colors, radius, sizes, spacing, keyboardAppearance } from '../design/theme';
+import { Card, Checkbox, RowIconButton } from '../design/ui';
 
 interface Props {
   tasks: Task[];
@@ -18,6 +19,7 @@ interface Props {
 
 export function TaskListCard({ tasks, onToggle, onDelete, onAdd, onEdit, onSchedule }: Props) {
   const type = useType();
+  const accent = useAccent();
   const [draft, setDraft] = useState('');
   const canAdd = draft.trim() !== '';
 
@@ -41,38 +43,16 @@ export function TaskListCard({ tasks, onToggle, onDelete, onAdd, onEdit, onSched
       ) : (
         tasks.map((task, i) => (
           <View key={task.id} style={[styles.row, i > 0 && styles.divider]}>
-            <Pressable
-              onPress={() => onToggle(task.id)}
-              hitSlop={10}
-              style={[styles.checkbox, task.done && styles.checked]}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: task.done }}
-              aria-checked={task.done}
-              accessibilityLabel={task.text}
-            >
-              {task.done ? <Ionicons name="checkmark" size={15} color={colors.onAccent} /> : null}
-            </Pressable>
+            <Checkbox checked={task.done} onPress={() => onToggle(task.id)} label={task.text} />
             <Text style={[type.body, styles.title, task.done && styles.titleDone]} onPress={() => onToggle(task.id)}>
               {task.text}
             </Text>
-            <Pressable
+            <RowIconButton
+              icon="calendar-outline"
+              label={`Set date and time for ${task.text}`}
               onPress={() => onEdit(task.id)}
-              hitSlop={10}
-              style={({ pressed }) => [styles.iconAction, pressed && styles.pressed]}
-              accessibilityRole="button"
-              accessibilityLabel={`Set date and time for ${task.text}`}
-            >
-              <Ionicons name="calendar-outline" size={18} color={colors.textMuted} />
-            </Pressable>
-            <Pressable
-              onPress={() => onDelete(task.id)}
-              hitSlop={10}
-              style={({ pressed }) => [styles.iconAction, pressed && styles.pressed]}
-              accessibilityRole="button"
-              accessibilityLabel={`Delete ${task.text}`}
-            >
-              <Ionicons name="trash-outline" size={18} color={colors.textMuted} />
-            </Pressable>
+            />
+            <RowIconButton icon="trash-outline" label={`Delete ${task.text}`} onPress={() => onDelete(task.id)} />
           </View>
         ))
       )}
@@ -84,7 +64,7 @@ export function TaskListCard({ tasks, onToggle, onDelete, onAdd, onEdit, onSched
           onChangeText={setDraft}
           placeholder="Add a task"
           placeholderTextColor={colors.textMuted}
-          keyboardAppearance="dark"
+          keyboardAppearance={keyboardAppearance}
           returnKeyType="done"
           onSubmitEditing={add}
           submitBehavior="submit"
@@ -101,11 +81,16 @@ export function TaskListCard({ tasks, onToggle, onDelete, onAdd, onEdit, onSched
         <Pressable
           onPress={add}
           disabled={!canAdd}
-          style={({ pressed }) => [styles.addButton, !canAdd && styles.disabled, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.addButton,
+            { backgroundColor: accent.accent },
+            !canAdd && styles.disabled,
+            pressed && styles.pressed,
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Add task"
         >
-          <Ionicons name="add" size={22} color={colors.onAccent} />
+          <Ionicons name="add" size={22} color={accent.onAccent} />
         </Pressable>
       </View>
     </Card>
@@ -114,27 +99,22 @@ export function TaskListCard({ tasks, onToggle, onDelete, onAdd, onEdit, onSched
 
 const styles = StyleSheet.create({
   card: { padding: 0, overflow: 'hidden' },
-  empty: { color: colors.textMuted, paddingHorizontal: 14, paddingVertical: 14 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
-  divider: { borderTopWidth: 1, borderTopColor: colors.border },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    borderColor: colors.textMuted,
+  empty: { color: colors.textMuted, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
+  row: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  checked: { backgroundColor: colors.success, borderColor: colors.success },
+  divider: { borderTopWidth: 1, borderTopColor: colors.border },
   title: { flex: 1 },
   titleDone: { color: colors.textMuted, textDecorationLine: 'line-through' },
-  iconAction: { padding: 2 },
   pressed: { opacity: 0.6 },
   addRow: {
     flexDirection: 'row',
-    gap: 8,
-    padding: 10,
+    gap: spacing.sm,
+    padding: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     backgroundColor: colors.surface2,
@@ -142,18 +122,17 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     minWidth: 0,
-    height: 42,
+    height: sizes.control,
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.control,
-    paddingHorizontal: 10,
+    paddingHorizontal: spacing.md,
   },
   addButton: {
-    width: 42,
-    height: 42,
+    width: sizes.control,
+    height: sizes.control,
     borderRadius: radius.control,
-    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },

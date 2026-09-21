@@ -3,9 +3,10 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { formatAmount, parseAmount, sanitizeAmountInput } from '../coach/format';
 import type { Goal } from '../coach/store';
+import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
 import { Sheet } from '../design/Sheet';
-import { colors, spacing } from '../design/theme';
+import { colors, spacing, keyboardAppearance } from '../design/theme';
 import { Button, fieldStyles } from '../design/ui';
 
 interface Props {
@@ -24,6 +25,7 @@ export function LogProgressSheet({ goal, onClose, onSave }: Props) {
 
 function LogBody({ goal, onClose, onSave }: { goal: Goal } & Omit<Props, 'goal'>) {
   const type = useType();
+  const accent = useAccent();
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const value = parseAmount(amount);
@@ -31,7 +33,7 @@ function LogBody({ goal, onClose, onSave }: { goal: Goal } & Omit<Props, 'goal'>
 
   const explanation =
     goal.type === 'best'
-      ? `Best so far: ${formatAmount(goal.current)}${unit}. Only a higher result raises it. Logging again today replaces today's entry.`
+      ? `Best single set so far: ${formatAmount(goal.current)}${unit}. Only a higher set raises it. Each log adds another set for today.`
       : `Total so far: ${formatAmount(goal.current)}${unit}. What you log is added to it.`;
 
   let preview = '';
@@ -62,7 +64,7 @@ function LogBody({ goal, onClose, onSave }: { goal: Goal } & Omit<Props, 'goal'>
           keyboardType="decimal-pad"
           placeholder="0"
           placeholderTextColor={colors.textMuted}
-          keyboardAppearance="dark"
+          keyboardAppearance={keyboardAppearance}
           autoFocus
           accessibilityLabel="Progress amount"
         />
@@ -72,13 +74,13 @@ function LogBody({ goal, onClose, onSave }: { goal: Goal } & Omit<Props, 'goal'>
           onChangeText={setNote}
           placeholder="Note (optional)"
           placeholderTextColor={colors.textMuted}
-          keyboardAppearance="dark"
+          keyboardAppearance={keyboardAppearance}
           returnKeyType="done"
           onSubmitEditing={save}
           accessibilityLabel="Progress note"
         />
       </View>
-      <Text style={[type.mono, styles.preview]}>{preview || ' '}</Text>
+      <Text style={[type.mono, { color: accent.accent }]}>{preview || ' '}</Text>
 
       <View style={styles.actions}>
         <Button label="Cancel" variant="secondary" onPress={onClose} />
@@ -93,6 +95,5 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.sm },
   amount: { width: 110, fontSize: 26, textAlign: 'center' },
   note: { flex: 1, minWidth: 0 },
-  preview: { color: colors.accent },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm },
 });

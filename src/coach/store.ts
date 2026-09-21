@@ -134,11 +134,10 @@ function normalize(raw: unknown): CoachState {
       note: str(e.note),
       loggedAt: isNum(e.loggedAt) ? e.loggedAt : 0,
     };
-    // Best-result goals keep one entry per day (the last one wins).
-    const sameDay = goal.type === 'best' ? entries.findIndex((x) => x.goalId === goal.id && x.date === entry.date) : -1;
-    if (sameDay >= 0) entries[sameDay] = entry;
-    else entries.push(entry);
-    // A best result is never lower than anything logged.
+    // Best-result goals can have several entries (sets) on the same day now — they
+    // all stay, so the day's total and its individual sets are still known.
+    entries.push(entry);
+    // A best result is never lower than any single set logged.
     if (goal.type === 'best') goal.current = Math.max(goal.current, entry.value);
   }
   entries.sort((a, b) => a.date.localeCompare(b.date) || a.loggedAt - b.loggedAt);
@@ -199,6 +198,11 @@ const store = createPersistedStore<CoachState>({
 });
 
 export const coachReady = store.ready;
+
+// Replaces everything from a backup file, through the same validation as a load.
+export function importCoachState(raw: unknown) {
+  store.set(normalize(raw));
+}
 export const getCoachState = store.get;
 export const useCoach = () => store.useStore();
 
@@ -219,8 +223,9 @@ export function entriesForGoal(state: CoachState, goalId: string): LogEntry[] {
 
 // --- goals
 
-// Best-result goals: replaces that day's entry and raises `current` only if higher.
-// Cumulative goals: adds a new entry and adds the value to `current`.
+// Best-result goals: each log adds a new set for that day (never overwrites an earlier
+// one) and raises `current` — the best single set ever — only if this one is higher.
+// Cumulative goals: adds a new entry and adds the value to the running total.
 export function logProgress(
   goalId: string,
   value: number,
@@ -233,19 +238,18 @@ export function logProgress(
 
   const amount = roundAmount(value);
   const entry: LogEntry = { id: newId('entry'), goalId, date, value: amount, note: note.trim(), loggedAt: Date.now() };
+  const entries = [...state.entries, entry].sort(
+    (a, b) => a.date.localeCompare(b.date) || a.loggedAt - b.loggedAt,
+  );
 
-  let entries: LogEntry[];
   let current: number;
   let isNewBest = false;
   if (goal.type === 'best') {
-    entries = [...state.entries.filter((e) => !(e.goalId === goalId && e.date === date)), entry];
     isNewBest = amount > goal.current;
     current = Math.max(goal.current, amount);
   } else {
-    entries = [...state.entries, entry];
     current = roundAmount(goal.current + amount);
   }
-  entries.sort((a, b) => a.date.localeCompare(b.date) || a.loggedAt - b.loggedAt);
 
   store.set({ ...state, entries, goals: state.goals.map((g) => (g.id === goalId ? { ...g, current } : g)) });
   return { isNewBest, current };

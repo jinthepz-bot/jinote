@@ -145,6 +145,11 @@ const store = createPersistedStore<NotesState>({
 });
 
 export const notesReady = store.ready;
+
+// Replaces everything from a backup file, through the same validation as a load.
+export function importNotes(raw: unknown) {
+  store.set(normalize(raw));
+}
 export const getNotesState = store.get;
 export const useNotes = () => store.useStore();
 

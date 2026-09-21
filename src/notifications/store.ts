@@ -39,6 +39,11 @@ const store = createPersistedStore<NotificationPrefs>({
 });
 
 export const notificationPrefsReady = store.ready;
+
+// Replaces everything from a backup file, through the same validation as a load.
+export function importNotificationPrefs(raw: unknown) {
+  store.set(normalize(raw));
+}
 export const getNotificationPrefs = store.get;
 export const useNotificationPrefs = () => store.useStore();
 

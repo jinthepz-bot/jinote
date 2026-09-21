@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { dayKey, formatDayKey, formatTime } from '../coach/days';
 import { confirmDestructive } from '../design/confirm';
 import { useType } from '../design/fonts';
+import { spacing } from '../design/theme';
 import { Card, IconButton } from '../design/ui';
 import { deleteNote, type QuickNote } from './store';
 
@@ -33,6 +34,6 @@ export function QuickNoteCard({ note, todayKey }: { note: QuickNote; todayKey: s
 }
 
 const styles = StyleSheet.create({
-  card: { gap: 6 },
+  card: { gap: spacing.sm },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
 });

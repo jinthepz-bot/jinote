@@ -10,6 +10,12 @@ export interface DayActivity {
 
 const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
+// Every value logged for `date`, in the order they were logged (oldest first) — a
+// best-result goal's individual sets for that day, e.g. [20, 15, 10].
+export function setsOnDay(entries: LogEntry[], date: string): number[] {
+  return entries.filter((e) => e.date === date).map((e) => e.value);
+}
+
 // Oldest first, ending with today. Values on the same day are added together.
 export function last7Days(entries: LogEntry[], todayKey: string): DayActivity[] {
   const totals = new Map<string, number>();

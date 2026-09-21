@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   Keyboard,
@@ -10,14 +10,17 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { useRoute, type RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatAmount } from '../coach/format';
 import { addBuyItem, deleteBuyItem, toggleBought, useCoach } from '../coach/store';
 import { useTodayKey } from '../coach/useTodayKey';
 import { useType } from '../design/fonts';
-import { colors, radius, spacing } from '../design/theme';
-import { Button, Card, fieldStyles, ScreenTitle, Section } from '../design/ui';
+import { colors, radius, spacing, keyboardAppearance } from '../design/theme';
+import { AddAction, Button, Card, Chip, fieldStyles, screenContentStyle, ScreenTitle, Section, Segmented } from '../design/ui';
+import type { RootTabParamList } from '../navigation/RootNavigator';
+import { SettingsButton } from '../navigation/SettingsHost';
 import { BuyListCard } from '../goals/BuyListCard';
 import { ChecklistCard } from '../notes/ChecklistCard';
 import { NoteForm } from '../notes/NoteForm';
@@ -49,10 +52,19 @@ const CATEGORY_FILTERS: { value: RecipeCategory | 'all'; label: string }[] = [
 
 // Holds its own draft state so typing doesn't re-render the note list. Always
 // creates a quick note — the "+ New note" flow below is where you pick a type.
-function Composer() {
+//
+// The draft is mirrored into `draft` (a ref owned by the screen), so it survives the
+// list remounting when the layout switches between list and recipe grid. A ref rather
+// than screen state, so typing still doesn't re-render the note list.
+function Composer({ draft }: { draft: { current: string } }) {
   const type = useType();
-  const [text, setText] = useState('');
+  const [text, setTextState] = useState(draft.current);
   const canSave = text.trim() !== '';
+
+  const setText = (next: string) => {
+    draft.current = next;
+    setTextState(next);
+  };
 
   const save = () => {
     if (addQuickNote(text)) {
@@ -69,7 +81,7 @@ function Composer() {
         onChangeText={setText}
         placeholder="What are you thinking about or curious about right now?"
         placeholderTextColor={colors.textMuted}
-        keyboardAppearance="dark"
+        keyboardAppearance={keyboardAppearance}
         multiline
         textAlignVertical="top"
         accessibilityLabel="Quick note"
@@ -100,51 +112,33 @@ function FilterBar({
   const type = useType();
   return (
     <View style={styles.filterWrap}>
-      <View style={styles.segment} accessibilityRole="radiogroup">
-        {FILTERS.map((option) => {
-          const selected = option.value === filter;
-          return (
-            <Pressable
-              key={option.value}
-              style={[styles.segmentOption, selected && styles.segmentSelected]}
-              onPress={() => onFilterChange(option.value)}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: selected }}
-              aria-checked={selected}
-              accessibilityLabel={`Show ${option.label.toLowerCase()}`}
-            >
-              <Text style={[type.label, styles.segmentText, selected && styles.segmentTextSelected]}>{option.label}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <Segmented
+        options={FILTERS}
+        value={filter}
+        onChange={onFilterChange}
+        describe={(option) => `Show ${option.label.toLowerCase()}`}
+      />
       <TextInput
         style={[fieldStyles.input, fieldStyles.single, type.body]}
         value={query}
         onChangeText={onQueryChange}
         placeholder="Search notes"
         placeholderTextColor={colors.textMuted}
-        keyboardAppearance="dark"
+        keyboardAppearance={keyboardAppearance}
         returnKeyType="search"
         clearButtonMode="while-editing"
         accessibilityLabel="Search notes"
       />
       <View style={styles.categoryRow} accessibilityRole="radiogroup">
-        {CATEGORY_FILTERS.map((option) => {
-          const selected = option.value === category;
-          return (
-            <Pressable
-              key={option.value}
-              style={[styles.categoryOption, selected && styles.categorySelected]}
-              onPress={() => onCategoryChange(option.value)}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: selected }}
-              accessibilityLabel={`Filter by ${option.label}`}
-            >
-              <Text style={[type.label, selected && styles.categoryTextSelected]}>{option.label}</Text>
-            </Pressable>
-          );
-        })}
+        {CATEGORY_FILTERS.map((option) => (
+          <Chip
+            key={option.value}
+            label={option.label}
+            selected={option.value === category}
+            onPress={() => onCategoryChange(option.value)}
+            accessibilityLabel={`Filter by ${option.label}`}
+          />
+        ))}
       </View>
     </View>
   );
@@ -167,6 +161,20 @@ export function JournalScreen() {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<RecipeCategory | 'all'>('all');
   const [creating, setCreating] = useState(false);
+  const listRef = useRef<FlatList<Note>>(null);
+  const draftRef = useRef('');
+
+  // The desktop sidebar's Journal sub-links arrive as route params. To-buy has no
+  // filter of its own — the shopping list sits at the top — so it just scrolls there.
+  const params = useRoute<RouteProp<RootTabParamList, 'Journal'>>().params;
+  useEffect(() => {
+    const section = params?.section;
+    if (!section) return;
+    setQuery('');
+    setCategory('all');
+    setFilter(section === 'buy' ? 'all' : section);
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, [params?.section, params?.n]);
 
   if (!loaded) return <View style={styles.root} />;
 
@@ -186,6 +194,9 @@ export function JournalScreen() {
     <View style={styles.root}>
       <KeyboardAvoidingView style={styles.flex} behavior="padding">
         <FlatList
+          // FlatList can't change numColumns in place; a new key remounts it.
+          key={recipeGrid ? 'grid' : 'list'}
+          ref={listRef}
           data={visible}
           keyExtractor={(n) => n.id}
           renderItem={({ item }) => <NoteRow note={item} todayKey={todayKey} />}
@@ -194,8 +205,12 @@ export function JournalScreen() {
           ItemSeparatorComponent={Separator}
           ListHeaderComponent={
             <View style={styles.header}>
-              <ScreenTitle label={`${count} ${count === 1 ? 'note' : 'notes'}`} title="JOURNAL" />
-              <Composer />
+              <ScreenTitle
+                label={`${count} ${count === 1 ? 'note' : 'notes'}`}
+                title="JOURNAL"
+                action={<SettingsButton />}
+              />
+              <Composer draft={draftRef} />
               <Section label="Shopping list" aside={buyAside}>
                 <BuyListCard items={coachState.toBuy} onAdd={addBuyItem} onToggle={toggleBought} onDelete={deleteBuyItem} />
               </Section>
@@ -213,14 +228,7 @@ export function JournalScreen() {
                   if (next !== 'all') setFilter('recipe');
                 }}
               />
-              <Pressable
-                onPress={() => setCreating(true)}
-                style={({ pressed }) => [styles.newNote, pressed && styles.pressed]}
-                accessibilityRole="button"
-                accessibilityLabel="New note"
-              >
-                <Text style={[type.label, styles.newNoteText]}>+ New note (recipe or checklist)</Text>
-              </Pressable>
+              <AddAction label="New note (recipe or checklist)" onPress={() => setCreating(true)} />
             </View>
           }
           ListEmptyComponent={
@@ -246,45 +254,14 @@ function Separator() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
-  content: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xl * 2,
-    width: '100%',
-    maxWidth: 560,
-    alignSelf: 'center',
-  },
-  header: { gap: spacing.lg, marginBottom: spacing.sm },
-  composer: { gap: 10 },
-  textArea: { minHeight: 120, paddingTop: 10, paddingBottom: 10 },
+  content: screenContentStyle,
+  header: { gap: spacing.xl, marginBottom: spacing.xl },
+  composer: { gap: spacing.md },
+  textArea: { minHeight: 120, paddingTop: spacing.md, paddingBottom: spacing.md },
   composerFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   hint: { flex: 1, fontSize: 11 },
   filterWrap: { gap: spacing.sm },
-  categoryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  categoryOption: { paddingHorizontal: 9, paddingVertical: 7, borderRadius: radius.control, borderWidth: 1, borderColor: colors.border },
-  categorySelected: { backgroundColor: colors.accent, borderColor: colors.accent },
-  categoryTextSelected: { color: colors.onAccent },
-  segment: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.control,
-    padding: 3,
-  },
-  segmentOption: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: radius.control - 2 },
-  segmentSelected: { backgroundColor: colors.accent },
-  segmentText: { fontSize: 10 },
-  segmentTextSelected: { color: colors.onAccent },
-  newNote: {
-    height: 44,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  newNoteText: { color: colors.accent },
+  categoryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   pressed: { opacity: 0.7 },
   empty: { color: colors.textMuted },
   separator: { height: spacing.sm },

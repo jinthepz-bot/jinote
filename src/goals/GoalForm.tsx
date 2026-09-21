@@ -6,8 +6,9 @@ import { parseAmount, sanitizeAmountInput } from '../coach/format';
 import type { GoalType, NewGoalInput } from '../coach/store';
 import { useType } from '../design/fonts';
 import { Sheet } from '../design/Sheet';
-import { colors, radius, spacing } from '../design/theme';
-import { Button, fieldStyles } from '../design/ui';
+import { colors, radius, spacing, keyboardAppearance } from '../design/theme';
+import { useAccent } from '../design/accent';
+import { Button, fieldStyles, Segmented } from '../design/ui';
 import { MonthCalendar } from '../home/MonthCalendar';
 
 interface Props {
@@ -42,6 +43,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 function FormBody({ todayKey, onCancel, onCreate }: Omit<Props, 'visible'>) {
   const type = useType();
+  const accent = useAccent();
   const [title, setTitle] = useState('');
   const [target, setTarget] = useState('');
   const [goalType, setGoalType] = useState<GoalType>('cumulative');
@@ -66,7 +68,7 @@ function FormBody({ todayKey, onCancel, onCreate }: Omit<Props, 'visible'>) {
           onChangeText={setTitle}
           placeholder="e.g. Save for a new bike"
           placeholderTextColor={colors.textMuted}
-          keyboardAppearance="dark"
+          keyboardAppearance={keyboardAppearance}
           autoFocus
           accessibilityLabel="Goal title"
         />
@@ -80,30 +82,13 @@ function FormBody({ todayKey, onCancel, onCreate }: Omit<Props, 'visible'>) {
           keyboardType="decimal-pad"
           placeholder="0"
           placeholderTextColor={colors.textMuted}
-          keyboardAppearance="dark"
+          keyboardAppearance={keyboardAppearance}
           accessibilityLabel="Goal target"
         />
       </Field>
 
       <Field label="Type">
-        <View style={styles.segment} accessibilityRole="radiogroup">
-          {TYPES.map((option) => {
-            const selected = option.value === goalType;
-            return (
-              <Pressable
-                key={option.value}
-                style={[styles.segmentOption, selected && styles.segmentSelected]}
-                onPress={() => setGoalType(option.value)}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: selected }}
-                aria-checked={selected}
-                accessibilityLabel={option.label}
-              >
-                <Text style={[type.label, selected && styles.segmentTextSelected]}>{option.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <Segmented options={TYPES} value={goalType} onChange={setGoalType} />
         <Text style={type.mono}>{TYPES.find((t) => t.value === goalType)!.hint}</Text>
       </Field>
 
@@ -123,7 +108,7 @@ function FormBody({ todayKey, onCancel, onCreate }: Omit<Props, 'visible'>) {
             accessibilityRole="button"
             accessibilityLabel={calendarOpen ? 'Hide calendar' : 'Pick deadline'}
           >
-            <Text style={[type.label, styles.pickText]}>{calendarOpen ? 'Hide' : deadline ? 'Change' : 'Pick'}</Text>
+            <Text style={[type.label, { color: accent.accent }]}>{calendarOpen ? 'Hide' : deadline ? 'Change' : 'Pick'}</Text>
           </Pressable>
         </View>
         {calendarOpen ? (
@@ -148,22 +133,10 @@ function FormBody({ todayKey, onCancel, onCreate }: Omit<Props, 'visible'>) {
 
 const styles = StyleSheet.create({
   heading: { fontSize: 34, lineHeight: 38, letterSpacing: 1 },
-  field: { gap: 6 },
+  field: { gap: spacing.sm },
   target: { fontSize: 24 },
-  segment: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.control,
-    padding: 3,
-  },
-  segmentOption: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: radius.control - 2 },
-  segmentSelected: { backgroundColor: colors.accent },
-  segmentTextSelected: { color: colors.onAccent },
   deadlineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 28 },
   deadlineText: { flex: 1, color: colors.text },
   clearText: { color: colors.accentStrong },
-  pickText: { color: colors.accent },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.xs },
 });
