@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { daysBetween, formatDayKey } from '../coach/days';
+import { hoverFill } from '../design/hover';
 import { useType } from '../design/fonts';
 import { describeEventTime } from './format';
 import type { Occurrence } from './occurrences';
@@ -19,7 +20,7 @@ export function UpcomingRow({ occurrence, todayKey, onPress }: { occurrence: Occ
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+      style={(state) => [styles.row, hoverFill(state)]}
       accessibilityRole="button"
       accessibilityLabel={`Edit ${event.title}`}
     >

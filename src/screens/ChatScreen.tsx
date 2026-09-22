@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRef } from 'react';
 import { FlatList, KeyboardAvoidingView, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,8 +10,9 @@ import { TaskCard } from '../components/TaskCard';
 import { useMock } from '../config';
 import { confirmDestructive } from '../design/confirm';
 import { useAccent } from '../design/accent';
+import { hoverFill } from '../design/hover';
 import { useType } from '../design/fonts';
-import { colors, radius, spacing } from '../design/theme';
+import { colors, radius, sizes, spacing } from '../design/theme';
 import { SettingsButton } from '../navigation/SettingsHost';
 import type { AppMessage } from '../types';
 import { useAgentChat } from '../useAgentChat';
@@ -30,7 +32,7 @@ function EmptyState({ onPick }: { onPick: (text: string) => void }) {
       {EXAMPLES.map((example) => (
         <Pressable
           key={example}
-          style={({ pressed }) => [styles.example, pressed && styles.pressed]}
+          style={(state) => [styles.example, hoverFill(state)]}
           onPress={() => onPick(example)}
           accessibilityRole="button"
         >
@@ -41,9 +43,26 @@ function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   );
 }
 
+// A bordered chevron matching the Settings gear, so the panel's two header controls
+// are the same size and shape.
+function CollapseButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel="Hide coach panel"
+      style={(state) => [styles.headerButton, hoverFill(state)]}
+    >
+      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+    </Pressable>
+  );
+}
+
 // `embedded` is the desktop coach panel: no safe-area padding, no Settings gear
-// (the sidebar has one), and a compact header. The chat logic is the same hook.
-export function ChatScreen({ embedded = false }: { embedded?: boolean }) {
+// (the sidebar has one), a compact header, and a button to collapse the panel.
+// The chat logic is the same hook.
+export function ChatScreen({ embedded = false, onCollapse }: { embedded?: boolean; onCollapse?: () => void }) {
   const { messages, activity, loaded, send, stop, clear } = useAgentChat();
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<AppMessage>>(null);
@@ -63,7 +82,7 @@ export function ChatScreen({ embedded = false }: { embedded?: boolean }) {
         mock={useMock}
         canClear={messages.length > 0}
         onClear={confirmClear}
-        action={embedded ? undefined : <SettingsButton />}
+        action={embedded ? onCollapse && <CollapseButton onPress={onCollapse} /> : <SettingsButton />}
         compact={embedded}
       />
       <KeyboardAvoidingView style={styles.flex} behavior="padding">
@@ -104,4 +123,13 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   pressed: { opacity: 0.7 },
+  headerButton: {
+    width: sizes.controlSm,
+    height: sizes.controlSm,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

@@ -10,18 +10,25 @@ import {
 } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { useState, type ComponentProps } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAccent } from '../design/accent';
+import { hoverFill } from '../design/hover';
 import { useType } from '../design/fonts';
-import { colors } from '../design/theme';
+import { colors, radius, sizes, spacing } from '../design/theme';
 import { ChatScreen } from '../screens/ChatScreen';
 import { GoalsScreen } from '../screens/GoalsScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { JournalScreen } from '../screens/JournalScreen';
 import { ScheduleScreen } from '../screens/ScheduleScreen';
-import { COACH_PANEL_WIDTH, useIsDesktop } from './layout';
+import { setCoachPanelCollapsed } from './coachPanelStore';
+import {
+  COACH_PANEL_COLLAPSED_WIDTH,
+  COACH_PANEL_WIDTH,
+  useCoachPanelCollapsed,
+  useIsDesktop,
+} from './layout';
 import { SettingsHost } from './SettingsHost';
 import { Sidebar, type JournalSection, type SidebarTarget } from './Sidebar';
 
@@ -120,6 +127,7 @@ export function RootNavigator() {
   const type = useType();
   const accent = useAccent();
   const desktop = useIsDesktop();
+  const coachCollapsed = useCoachPanelCollapsed();
   const navRef = useNavigationContainerRef<RootTabParamList>();
   const [route, setRoute] = useState<string>('Home');
   const [journalSection, setJournalSection] = useState<JournalSection | undefined>();
@@ -169,9 +177,24 @@ export function RootNavigator() {
           <View style={styles.desktop}>
             <Sidebar route={route} journalSection={journalSection} onNavigate={navigate} />
             <View style={styles.main}>{tabs}</View>
-            <View style={styles.coach}>
-              <ChatScreen embedded />
-            </View>
+            {coachCollapsed ? (
+              <View style={styles.coachStrip}>
+                <Pressable
+                  onPress={() => setCoachPanelCollapsed(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Show coach panel"
+                  style={(state) => [styles.coachStripButton, hoverFill(state)]}
+                >
+                  <Ionicons name="chatbubble-ellipses-outline" size={20} color={accent.accent} />
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.coach}>
+                {/* Collapsing only unmounts the panel's view — the chat state lives in
+                    useAgentChat's store, so reopening it shows the same conversation. */}
+                <ChatScreen embedded onCollapse={() => setCoachPanelCollapsed(true)} />
+              </View>
+            )}
           </View>
         ) : (
           tabs
@@ -190,4 +213,23 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.border,
     backgroundColor: colors.background,
   },
+  coachStrip: {
+    width: COACH_PANEL_COLLAPSED_WIDTH,
+    borderLeftWidth: 1,
+    borderLeftColor: colors.border,
+    backgroundColor: colors.sidebar,
+    alignItems: 'center',
+    paddingTop: spacing.lg,
+  },
+  coachStripButton: {
+    width: sizes.controlSm,
+    height: sizes.controlSm,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pressed: { opacity: 0.7 },
 });

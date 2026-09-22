@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { hoverDim } from '../design/hover';
 import { useType } from '../design/fonts';
 import { colors, spacing } from '../design/theme';
 import { Card } from '../design/ui';
@@ -49,7 +50,7 @@ export function StatTile({ label, value, unit, tone = 'default', onPress, access
 
   return (
     <Pressable
-      style={({ pressed }) => [styles.slot, pressed && styles.pressed]}
+      style={(state) => [styles.slot, hoverDim(state)]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${label}: ${value}${unit ? ` ${unit}` : ''}`}

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { Task } from '../coach/store';
+import { hoverDim, hoverFill } from '../design/hover';
 import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
 import { colors, radius, sizes, spacing, keyboardAppearance } from '../design/theme';
@@ -72,7 +73,7 @@ export function TaskListCard({ tasks, onToggle, onDelete, onAdd, onEdit, onSched
         />
         <Pressable
           onPress={schedule}
-          style={({ pressed }) => [styles.addButton, styles.scheduleButton, pressed && styles.pressed]}
+          style={(state) => [styles.addButton, styles.scheduleButton, hoverFill(state)]}
           accessibilityRole="button"
           accessibilityLabel="Add a task with a date and time"
         >
@@ -81,11 +82,11 @@ export function TaskListCard({ tasks, onToggle, onDelete, onAdd, onEdit, onSched
         <Pressable
           onPress={add}
           disabled={!canAdd}
-          style={({ pressed }) => [
+          style={(state) => [
             styles.addButton,
             { backgroundColor: accent.accent },
             !canAdd && styles.disabled,
-            pressed && styles.pressed,
+            canAdd && hoverDim(state),
           ]}
           accessibilityRole="button"
           accessibilityLabel="Add task"

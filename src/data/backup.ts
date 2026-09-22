@@ -4,6 +4,8 @@ import { getThemeState, importTheme } from '../design/accent';
 import { getCoachState, importCoachState, type CoachState } from '../coach/store';
 import { getNotesState, importNotes } from '../notes/store';
 import { getNotificationPrefs, importNotificationPrefs } from '../notifications/store';
+import { getProfileState, importProfile } from '../profile/store';
+import { getCalendarPrefs, importCalendarPrefs } from '../schedule/calendar/viewStore';
 import { getScheduleState, importSchedule } from '../schedule/store';
 
 export const BACKUP_APP = 'jinote';
@@ -19,6 +21,8 @@ export interface Backup {
     schedule: unknown;
     notifications: unknown;
     theme: unknown;
+    profile: unknown;
+    calendar: unknown;
   };
 }
 
@@ -59,6 +63,8 @@ export function buildBackup(): Backup {
       schedule: getScheduleState(),
       notifications: getNotificationPrefs(),
       theme: getThemeState(),
+      profile: getProfileState(),
+      calendar: getCalendarPrefs(),
     },
   };
 }
@@ -103,6 +109,8 @@ export function parseBackup(text: string): ParseResult {
       schedule: data.schedule,
       notifications: data.notifications,
       theme: data.theme,
+      profile: data.profile, // absent in backups made before the name existed
+      calendar: data.calendar,
     },
   };
 
@@ -128,6 +136,8 @@ export function applyBackup(backup: Backup) {
   importSchedule(backup.data.schedule);
   importNotificationPrefs(backup.data.notifications);
   importTheme(backup.data.theme);
+  importProfile(backup.data.profile);
+  importCalendarPrefs(backup.data.calendar);
 }
 
 export function describeCounts(counts: BackupCounts): string {

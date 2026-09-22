@@ -1,10 +1,16 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useTodayKey } from '../coach/useTodayKey';
 import { useAccent } from '../design/accent';
+import { hoverFill } from '../design/hover';
 import { useType } from '../design/fonts';
 import { colors, radius, spacing } from '../design/theme';
 import type { IconName } from '../design/ui';
+import type { CalendarKind } from '../schedule/calendar/items';
+import { kindColors } from '../schedule/calendar/kindColors';
+import { goToDay, toggleFilter, useCalendarView, type CalendarFilters } from '../schedule/calendar/viewStore';
+import { MiniMonth } from './MiniMonth';
 import { SIDEBAR_WIDTH } from './layout';
 import { useSettings } from './SettingsHost';
 
@@ -84,8 +90,63 @@ export function Sidebar({ route, journalSection, onNavigate }: Props) {
         })}
       </View>
 
+      {route === 'Schedule' ? <ScheduleTools /> : null}
+
       <View style={styles.spacer} />
       <NavLink label="Settings" icon="settings-outline" activeColor={accent.accent} onPress={openSettings} />
+    </View>
+  );
+}
+
+const FILTERS: { key: keyof CalendarFilters; label: string; kind: CalendarKind }[] = [
+  { key: 'events', label: 'Events', kind: 'event' },
+  { key: 'tasks', label: 'Tasks', kind: 'task' },
+  { key: 'sessions', label: 'Goal sessions', kind: 'session' },
+  { key: 'deadlines', label: 'Deadlines', kind: 'deadline' },
+];
+
+// Only while Schedule is the open screen: the month to jump around with, and which
+// kinds of item the grid draws. Both drive the calendar's own view store.
+function ScheduleTools() {
+  const type = useType();
+  const todayKey = useTodayKey();
+  const { anchor, filters } = useCalendarView();
+
+  return (
+    <View style={styles.tools}>
+      <MiniMonth anchor={anchor} todayKey={todayKey} onSelect={goToDay} />
+
+      <View style={styles.showBlock}>
+        <Text style={[type.label, styles.showLabel]}>Show</Text>
+        {FILTERS.map(({ key, label, kind }) => {
+          const on = filters[key];
+          const tint = kindColors(kind);
+          return (
+            <Pressable
+              key={key}
+              onPress={() => toggleFilter(key)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: on }}
+              aria-checked={on}
+              accessibilityLabel={`Show ${label.toLowerCase()}`}
+              style={(state) => [styles.showRow, hoverFill(state)]}
+            >
+              <View
+                style={[
+                  styles.showBox,
+                  { borderColor: tint.text },
+                  on && { backgroundColor: tint.text },
+                ]}
+              >
+                {on ? <Ionicons name="checkmark" size={12} color={colors.surface} /> : null}
+              </View>
+              <Text style={[type.body, styles.showText, !on && styles.showTextOff]} numberOfLines={1}>
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -113,12 +174,7 @@ function NavLink({
       accessibilityRole="link"
       accessibilityLabel={label}
       accessibilityState={{ selected: !!active }}
-      style={({ pressed }) => [
-        styles.link,
-        sub && styles.linkSub,
-        active && styles.linkActive,
-        pressed && styles.pressed,
-      ]}
+      style={(state) => [styles.link, sub && styles.linkSub, active && styles.linkActive, hoverFill(state)]}
     >
       {icon ? <Ionicons name={icon} size={17} color={tint} /> : null}
       <Text style={[active ? type.bodyStrong : type.body, { color: tint, fontSize: sub ? 14 : 15 }]}>{label}</Text>
@@ -152,6 +208,20 @@ const styles = StyleSheet.create({
   kbd: { fontSize: 11, letterSpacing: 0.4, textTransform: 'none' },
   nav: { gap: 2 },
   subList: { marginLeft: spacing.xl, gap: 2, marginBottom: spacing.xs },
+  tools: { gap: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md },
+  showBlock: { gap: 2 },
+  showLabel: { paddingHorizontal: spacing.sm + 2, paddingBottom: 2 },
+  showRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 28,
+    paddingHorizontal: spacing.sm + 2,
+    borderRadius: radius.control,
+  },
+  showBox: { width: 16, height: 16, borderRadius: 4, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  showText: { fontSize: 13 },
+  showTextOff: { color: colors.textMuted },
   spacer: { flex: 1 },
   link: {
     flexDirection: 'row',

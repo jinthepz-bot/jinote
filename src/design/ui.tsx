@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAccent } from './accent';
+import { hoverDim, hoverFill } from './hover';
 import { useType } from './fonts';
 import { colors, radius, sizes, spacing } from './theme';
 
@@ -112,12 +113,12 @@ export function Button({ label, onPress, variant = 'primary', small, disabled, a
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: Boolean(disabled) }}
-      style={({ pressed }) => [
+      style={(state) => [
         styles.button,
         small && styles.buttonSmall,
         primary ? { backgroundColor: accent.accent } : styles.secondary,
+        !disabled && (primary ? hoverDim(state) : hoverFill(state)),
         disabled && styles.disabled,
-        pressed && !disabled && styles.pressed,
         style,
       ]}
     >
@@ -144,7 +145,7 @@ export function IconButton({
       hitSlop={6}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+      style={(state) => [styles.iconButton, hoverFill(state)]}
     >
       <Ionicons name={icon} size={17} color={color} />
     </Pressable>
@@ -170,7 +171,7 @@ export function RowIconButton({
       hitSlop={10}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [styles.rowIconButton, pressed && styles.pressed]}
+      style={(state) => [styles.rowIconButton, hoverFill(state)]}
     >
       <Ionicons name={icon} size={sizes.rowIcon} color={color} />
     </Pressable>
@@ -184,7 +185,7 @@ export function AddAction({ label, onPress }: { label: string; onPress: () => vo
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.addAction, { borderColor: accent.accent }, pressed && styles.pressed]}
+      style={(state) => [styles.addAction, { borderColor: accent.accent }, hoverFill(state)]}
       accessibilityRole="button"
       accessibilityLabel={label}
     >
@@ -220,7 +221,11 @@ export function Segmented<T extends string>({
         return (
           <Pressable
             key={option.value}
-            style={[styles.segmentOption, selected && { backgroundColor: accent.accent }]}
+            style={(state) => [
+              styles.segmentOption,
+              selected && { backgroundColor: accent.accent },
+              selected ? hoverDim(state) : hoverFill(state),
+            ]}
             onPress={() => onChange(option.value)}
             accessibilityRole="radio"
             accessibilityState={{ checked: selected }}
@@ -260,7 +265,12 @@ export function Chip({
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.chip, selected && { backgroundColor: accent.accent, borderColor: accent.accent }, style]}
+      style={(state) => [
+        styles.chip,
+        selected && { backgroundColor: accent.accent, borderColor: accent.accent },
+        selected ? hoverDim(state) : hoverFill(state),
+        style,
+      ]}
       accessibilityRole={accessibilityRole}
       accessibilityState={accessibilityRole === 'button' ? undefined : { checked: selected }}
       aria-checked={accessibilityRole === 'button' ? undefined : selected}
@@ -289,7 +299,12 @@ export function Checkbox({
     <Pressable
       onPress={onPress}
       hitSlop={10}
-      style={[styles.checkbox, { width: size, height: size }, checked && styles.checkboxChecked]}
+      style={(state) => [
+        styles.checkbox,
+        { width: size, height: size },
+        checked && styles.checkboxChecked,
+        hoverDim(state),
+      ]}
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}
       aria-checked={checked}

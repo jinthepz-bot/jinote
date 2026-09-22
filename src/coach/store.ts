@@ -36,6 +36,9 @@ export interface Task {
   date: string | null; // optional local day "YYYY-MM-DD"; shown on Schedule when set
   time: string | null; // optional "HH:MM", 24-hour; only meaningful alongside a date
   createdAt: number;
+  // When it was checked off. null while open, and for tasks completed before this was
+  // recorded (the Home "Done today" list shows those without a time).
+  completedAt: number | null;
 }
 
 export interface BuyItem {
@@ -153,6 +156,7 @@ function normalize(raw: unknown): CoachState {
         date,
         time: date && isTimeKey(t.time) ? t.time : null, // a time with no date isn't shown anywhere, so drop it
         createdAt: isNum(t.createdAt) ? t.createdAt : 0,
+        completedAt: t.done === true && isNum(t.completedAt) ? t.completedAt : null,
       };
     });
 
@@ -305,6 +309,7 @@ export function addTask(text: string, date: string | null = null, time: string |
     date,
     time: date ? time : null, // a time with no date isn't shown anywhere, so drop it
     createdAt: Date.now(),
+    completedAt: null,
   };
   store.update((s) => ({ ...s, tasks: [...s.tasks, task] }));
 }
@@ -331,8 +336,13 @@ export function updateTask(id: string, input: TaskEdit) {
   store.update((s) => ({ ...s, tasks: s.tasks.map((t) => (t.id === id ? { ...t, text, date, time } : t)) }));
 }
 
+// Checking a task off stamps when; unchecking clears it.
+function toggled(t: Task): Task {
+  return t.done ? { ...t, done: false, completedAt: null } : { ...t, done: true, completedAt: Date.now() };
+}
+
 export function toggleTask(id: string) {
-  store.update((s) => ({ ...s, tasks: s.tasks.map((t) => (t.id === id ? { ...t, done: !t.done } : t)) }));
+  store.update((s) => ({ ...s, tasks: s.tasks.map((t) => (t.id === id ? toggled(t) : t)) }));
 }
 
 export function deleteTask(id: string) {

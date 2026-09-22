@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { hoverFill } from '../design/hover';
 import { useType } from '../design/fonts';
 import { colors, spacing } from '../design/theme';
 import { describeEventTime } from './format';
@@ -12,7 +13,7 @@ export function EventRow({ event, onPress }: { event: ScheduleEvent; onPress: ()
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+      style={(state) => [styles.row, hoverFill(state)]}
       accessibilityRole="button"
       accessibilityLabel={`Edit ${event.title}`}
     >

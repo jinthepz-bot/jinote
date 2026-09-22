@@ -135,7 +135,7 @@ function channels(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-const rgba = (hex: string, alpha: number) => {
+export const rgba = (hex: string, alpha: number) => {
   const [r, g, b] = channels(hex);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };

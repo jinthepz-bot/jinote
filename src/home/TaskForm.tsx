@@ -17,6 +17,7 @@ interface Props {
   todayKey: string;
   editing: Task | null; // null = creating a new task
   initialText?: string; // creating only: carries over whatever was already typed
+  initialDate?: string; // creating only: the day in view on the desktop calendar
   onCancel: () => void;
   onSave: (input: TaskEdit) => void;
   onDelete?: () => void;
@@ -40,11 +41,11 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function FormBody({ todayKey, editing, initialText, onCancel, onSave, onDelete }: Omit<Props, 'visible'>) {
+function FormBody({ todayKey, editing, initialText, initialDate, onCancel, onSave, onDelete }: Omit<Props, 'visible'>) {
   const type = useType();
   const accent = useAccent();
   const [text, setText] = useState(editing?.text ?? initialText ?? '');
-  const [date, setDate] = useState<string | null>(editing?.date ?? null);
+  const [date, setDate] = useState<string | null>(editing?.date ?? initialDate ?? null);
   const [time, setTime] = useState(editing?.time ?? '');
   const [calendarOpen, setCalendarOpen] = useState(false);
 

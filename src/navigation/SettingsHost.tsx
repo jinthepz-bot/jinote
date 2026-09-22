@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
+import { hoverFill } from '../design/hover';
 import { colors, radius, sizes, spacing } from '../design/theme';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { useIsDesktop } from './layout';
@@ -49,7 +50,7 @@ export function SettingsButton() {
       hitSlop={8}
       accessibilityRole="button"
       accessibilityLabel="Settings"
-      style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+      style={(state) => [styles.button, hoverFill(state)]}
     >
       <Ionicons name="settings-outline" size={18} color={colors.textMuted} />
     </Pressable>

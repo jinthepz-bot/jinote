@@ -21,6 +21,8 @@ import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
 import { colors, spacing } from '../design/theme';
 import { Section } from '../design/ui';
+import { DesktopHome } from '../home/DesktopHome';
+import { useIsDesktop } from '../navigation/layout';
 import { SettingsButton } from '../navigation/SettingsHost';
 import { DeadlinePicker } from '../home/DeadlinePicker';
 import { GoalProgress } from '../home/GoalProgress';
@@ -34,8 +36,13 @@ import { useNotes } from '../notes/store';
 import { eventsOnDay } from '../schedule/occurrences';
 import { useSchedule } from '../schedule/store';
 
-// Home is driven by the featured goal selected from Goals.
+// Home is driven by the featured goal selected from Goals. Desktop has its own
+// layout (see home/DesktopHome); the phone screen below is unchanged.
 export function HomeScreen() {
+  return useIsDesktop() ? <DesktopHome /> : <PhoneHome />;
+}
+
+function PhoneHome() {
   const type = useType();
   const accent = useAccent();
   const insets = useSafeAreaInsets();

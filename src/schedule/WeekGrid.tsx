@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { weekdayShort } from '../coach/days';
+import { hoverDim } from '../design/hover';
 import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
 import { colors, radius } from '../design/theme';
@@ -77,7 +78,7 @@ function EventBlock({ item, onPress }: { item: PositionedEvent; onPress: () => v
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
+      style={(state) => [
         styles.event,
         palette,
         {
@@ -86,7 +87,7 @@ function EventBlock({ item, onPress }: { item: PositionedEvent; onPress: () => v
           left: `${(item.column * 100) / item.columns}%`,
           width: `${100 / item.columns}%`,
         },
-        pressed && styles.pressed,
+        hoverDim(state),
       ]}
       accessibilityRole="button"
       accessibilityLabel={`Edit ${item.event.title}`}

@@ -16,6 +16,9 @@ interface Props {
   visible: boolean;
   todayKey: string;
   editing: ScheduleEvent | null; // null = creating a new event
+  // Creating only: a slot clicked on the desktop calendar, which starts the form as a
+  // one-off on that day at that time.
+  initial?: { date?: string; startTime?: string };
   onCancel: () => void;
   onSave: (input: NewEventInput) => void;
   onDelete?: () => void;
@@ -135,16 +138,16 @@ function DateField({
   );
 }
 
-function FormBody({ todayKey, editing, onCancel, onSave, onDelete }: Omit<Props, 'visible'>) {
+function FormBody({ todayKey, editing, initial, onCancel, onSave, onDelete }: Omit<Props, 'visible'>) {
   const type = useType();
   const accent = useAccent();
   const [title, setTitle] = useState(editing?.title ?? '');
-  const [eventType, setEventType] = useState<EventType>(editing?.type ?? 'recurring');
+  const [eventType, setEventType] = useState<EventType>(editing?.type ?? (initial?.date ? 'one-off' : 'recurring'));
   const [days, setDays] = useState<number[]>(editing?.days ?? []);
-  const [date, setDate] = useState<string | null>(editing?.date ?? null);
+  const [date, setDate] = useState<string | null>(editing?.date ?? initial?.date ?? null);
   const [startDate, setStartDate] = useState<string | null>(editing?.startDate ?? null);
   const [endDate, setEndDate] = useState<string | null>(editing?.endDate ?? null);
-  const [startTime, setStartTime] = useState(editing?.startTime ?? '');
+  const [startTime, setStartTime] = useState(editing?.startTime ?? initial?.startTime ?? '');
   const [endTime, setEndTime] = useState(editing?.endTime ?? '');
   const [color, setColor] = useState<EventColor>(editing?.color ?? 'accent');
   const [location, setLocation] = useState(editing?.location ?? '');

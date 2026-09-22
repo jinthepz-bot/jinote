@@ -10,7 +10,9 @@ import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
 import { colors, radius, spacing } from '../design/theme';
 import { AddAction, Card, ScreenTitle, Section } from '../design/ui';
+import { useIsDesktop } from '../navigation/layout';
 import { SettingsButton } from './../navigation/SettingsHost';
+import { DesktopSchedule } from '../schedule/calendar/DesktopSchedule';
 import { TaskForm } from '../home/TaskForm';
 import { EventForm } from '../schedule/EventForm';
 import { upcomingOccurrences } from '../schedule/occurrences';
@@ -21,7 +23,12 @@ import { WeekGrid } from '../schedule/WeekGrid';
 
 const UPCOMING_LIMIT = 8;
 
+// Desktop gets the calendar (see schedule/calendar); the phone screen below is unchanged.
 export function ScheduleScreen() {
+  return useIsDesktop() ? <DesktopSchedule /> : <PhoneSchedule />;
+}
+
+function PhoneSchedule() {
   const type = useType();
   const accent = useAccent();
   const insets = useSafeAreaInsets();

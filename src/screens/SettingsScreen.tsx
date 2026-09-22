@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { resetCoachData } from '../coach/store';
 import { applyBackup, currentCounts, describeCounts, parseBackup, type BackupCounts } from '../data/backup';
 import { exportBackup, readBackupFile } from '../data/backupFile';
+import { hoverFill } from '../design/hover';
 import { useAccent, useAccentChooser } from '../design/accent';
 import { confirmDestructive } from '../design/confirm';
 import { useType } from '../design/fonts';
@@ -13,6 +14,7 @@ import { ACCENTS, colors, radius, sizes, spacing, keyboardAppearance } from '../
 import { Button, Card, fieldStyles, screenContentStyle, ScreenTitle, Section, ToggleRow } from '../design/ui';
 import { deleteNotePhoto } from '../notes/photos';
 import { resetNotes } from '../notes/store';
+import { setUserName, useProfile } from '../profile/store';
 import { notificationsSupported, requestPermission, usePermissionState, type PermissionState } from '../notifications/scheduler';
 import {
   setDailyReminderEnabled,
@@ -58,12 +60,14 @@ export function SettingsScreen({ onClose }: { onClose: () => void }) {
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel="Close settings"
-              style={({ pressed }) => [styles.close, pressed && styles.pressed]}
+              style={(state) => [styles.close, hoverFill(state)]}
             >
               <Ionicons name="close" size={20} color={colors.text} />
             </Pressable>
           }
         />
+
+        <ProfileSection />
 
         <AppearanceSection />
 
@@ -153,6 +157,37 @@ export function SettingsScreen({ onClose }: { onClose: () => void }) {
   );
 }
 
+// --- profile
+
+// Saved on every keystroke: it's one short field, and there's nothing to validate.
+// Clearing it is allowed — the greeting then just says "Good morning."
+function ProfileSection() {
+  const type = useType();
+  const { state, loaded } = useProfile();
+
+  return (
+    <Section label="You">
+      <Card style={styles.card}>
+        <Text style={[type.body, styles.muted]}>
+          What your coach calls you in the greeting on a wide screen. Leave it empty for no name.
+        </Text>
+        <TextInput
+          style={[fieldStyles.input, fieldStyles.single, type.body]}
+          value={loaded ? state.name : ''}
+          onChangeText={setUserName}
+          placeholder="Your name"
+          placeholderTextColor={colors.textMuted}
+          keyboardAppearance={keyboardAppearance}
+          autoCapitalize="words"
+          returnKeyType="done"
+          maxLength={40}
+          accessibilityLabel="Your name"
+        />
+      </Card>
+    </Section>
+  );
+}
+
 // --- appearance
 
 function AppearanceSection() {
@@ -174,10 +209,10 @@ function AppearanceSection() {
               <Pressable
                 key={option.id}
                 onPress={() => preview(option.id)}
-                style={({ pressed }) => [
+                style={(state) => [
                   styles.swatch,
                   { borderColor: selected ? colors.text : colors.border },
-                  pressed && styles.pressed,
+                  hoverFill(state),
                 ]}
                 accessibilityRole="radio"
                 accessibilityState={{ checked: selected }}

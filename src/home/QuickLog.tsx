@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { GoalType, LogEntry } from '../coach/store';
+import { hoverDim } from '../design/hover';
 import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
 import { colors, radius, sizes, spacing, keyboardAppearance } from '../design/theme';
@@ -63,11 +64,11 @@ export function QuickLog({ goalType, unit, todayEntries, onLog }: Props) {
           accessibilityLabel="Note"
         />
         <Pressable
-          style={({ pressed }) => [
+          style={(state) => [
             styles.button,
             { backgroundColor: accent.accent },
             !valid && styles.buttonDisabled,
-            pressed && styles.pressed,
+            valid && hoverDim(state),
           ]}
           onPress={submit}
           disabled={!valid}

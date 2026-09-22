@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { confirmDestructive } from '../design/confirm';
+import { hoverDim } from '../design/hover';
 import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
 import { colors, radius, sizes, spacing, keyboardAppearance } from '../design/theme';
@@ -84,11 +85,11 @@ export function ChecklistCard({ note }: { note: ChecklistNote }) {
         <Pressable
           onPress={add}
           disabled={!canAdd}
-          style={({ pressed }) => [
+          style={(state) => [
             styles.addButton,
             { backgroundColor: accent.accent },
             !canAdd && styles.disabled,
-            pressed && styles.pressed,
+            hoverDim(state),
           ]}
           accessibilityRole="button"
           accessibilityLabel="Add item"
