@@ -5,14 +5,25 @@ import { useType } from '../design/fonts';
 import { colors, radius, spacing } from '../design/theme';
 import type { TextMessage } from '../types';
 import { ActionChips } from './ActionChips';
+import { ActionReceipts } from './ActionReceipts';
 
-export function MessageBubble({ message }: { message: TextMessage }) {
+// `receipts` (the desktop coach panel) shows changes as receipt cards under the reply,
+// with Undo; the phone keeps its chips above it.
+export function MessageBubble({
+  message,
+  receipts,
+  onUndo,
+}: {
+  message: TextMessage;
+  receipts?: boolean;
+  onUndo?: (index: number) => void;
+}) {
   const type = useType();
   const accent = useAccent();
   const isUser = message.role === 'user';
   return (
     <View>
-      {message.actions?.length ? <ActionChips actions={message.actions} style={styles.chips} /> : null}
+      {!receipts && message.actions?.length ? <ActionChips actions={message.actions} style={styles.chips} /> : null}
       {message.text ? (
         <View
           style={[
@@ -29,6 +40,7 @@ export function MessageBubble({ message }: { message: TextMessage }) {
           </Text>
         </View>
       ) : null}
+      {receipts && message.actions?.length ? <ActionReceipts actions={message.actions} onUndo={onUndo} /> : null}
     </View>
   );
 }

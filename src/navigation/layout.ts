@@ -8,6 +8,8 @@ export const DESKTOP_MIN_WIDTH = 1024;
 export const SIDEBAR_WIDTH = 248;
 export const COACH_PANEL_WIDTH = 360;
 export const COACH_PANEL_COLLAPSED_WIDTH = 56;
+// Side sheets (the calendar's event editor) slide in over the coach panel.
+export const RIGHT_SHEET_WIDTH = 400;
 
 // Below this width the coach panel defaults to collapsed (it leaves too little room
 // for the main column otherwise); at or above it, it defaults open. Only the default —

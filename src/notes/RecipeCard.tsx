@@ -1,16 +1,32 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
+import type { ReactNode } from 'react';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAccent } from '../design/accent';
 import { confirmDestructive } from '../design/confirm';
 import { useType } from '../design/fonts';
+import { hoverDim, hoverFill } from '../design/hover';
 import { colors, radius, spacing } from '../design/theme';
 import { Card, IconButton } from '../design/ui';
 import { deleteNotePhoto } from './photos';
 import { deleteNote, type RecipeNote } from './store';
 
-export function RecipeCard({ note }: { note: RecipeNote }) {
+// `onOpen` (desktop only) makes the photo and the title links to the recipe's page.
+export function RecipeCard({ note, onOpen }: { note: RecipeNote; onOpen?: () => void }) {
   const type = useType();
   const accent = useAccent();
+  const link = (child: ReactNode, fill: boolean) =>
+    onOpen ? (
+      <Pressable
+        onPress={onOpen}
+        accessibilityRole="link"
+        accessibilityLabel={`Open "${note.title}"`}
+        style={(s) => (fill ? [styles.titleLink, hoverFill(s)] : hoverDim(s))}
+      >
+        {child}
+      </Pressable>
+    ) : (
+      child
+    );
 
   const confirmDelete = () =>
     confirmDestructive({
@@ -26,18 +42,24 @@ export function RecipeCard({ note }: { note: RecipeNote }) {
   return (
     <Card style={styles.card}>
       <View style={styles.imageWrap}>
-        {note.photoUri ? (
-          <Image source={{ uri: note.photoUri }} style={styles.photo} resizeMode="cover" />
-        ) : (
-          <View style={styles.placeholder}>
-            <Text style={[type.label, { color: accent.accent, letterSpacing: 1 }]}>NO PHOTO</Text>
-          </View>
+        {link(
+          note.photoUri ? (
+            <Image source={{ uri: note.photoUri }} style={styles.photo} resizeMode="cover" />
+          ) : (
+            <View style={styles.placeholder}>
+              <Text style={[type.label, { color: accent.accent, letterSpacing: 1 }]}>NO PHOTO</Text>
+            </View>
+          ),
+          false,
         )}
         <IconButton icon="trash-outline" label={`Delete recipe "${note.title}"`} onPress={confirmDelete} color={colors.text} />
       </View>
-      <Text style={[type.bodyStrong, styles.title]} numberOfLines={2}>
-        {note.title}
-      </Text>
+      {link(
+        <Text style={[type.bodyStrong, styles.title]} numberOfLines={2}>
+          {note.title}
+        </Text>,
+        true,
+      )}
       <View style={styles.tags}>
         {note.cookTime ? (
           <Text style={[type.mono, styles.tag, { color: accent.accent }]}>{note.cookTime}</Text>
@@ -69,6 +91,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   title: { paddingHorizontal: spacing.md, paddingTop: 2 },
+  titleLink: { marginHorizontal: spacing.xs, paddingVertical: 2, borderRadius: 6 },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, paddingHorizontal: spacing.md },
   tag: {
     backgroundColor: colors.surface2,

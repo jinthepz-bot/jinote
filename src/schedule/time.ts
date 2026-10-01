@@ -21,3 +21,9 @@ export function minutesOf(time: string): number {
 export function compareTimes(a: string, b: string): number {
   return minutesOf(a) - minutesOf(b);
 }
+
+// 555 -> "09:15". Clamped to the day, so arithmetic can't produce "24:30".
+export function timeFromMinutes(minutes: number): string {
+  const m = Math.min(23 * 60 + 59, Math.max(0, Math.round(minutes)));
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}

@@ -48,7 +48,8 @@ const WEEKDAY_CHIPS: { value: number; label: string }[] = [
   { value: 0, label: 'S' },
 ];
 
-function eventColorDot(color: EventColor, accent: AccentPalette): string {
+// Also used by the desktop event sheet (schedule/calendar/EventSheet).
+export function eventColorDot(color: EventColor, accent: AccentPalette): string {
   if (color === 'accent') return accent.accent;
   if (color === 'soft') return accent.accentSoft;
   return color === 'strong' ? colors.accentStrong : colors.success;

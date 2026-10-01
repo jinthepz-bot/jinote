@@ -7,6 +7,7 @@ import { useType } from '../../design/fonts';
 import { colors, radius, spacing } from '../../design/theme';
 import type { CalendarItem } from './items';
 import { gridLines, kindColors } from './kindColors';
+import { RoundCheck } from './RoundCheck';
 
 const WEEK_HEADER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MAX_PER_DAY = 3;
@@ -18,9 +19,10 @@ interface Props {
   itemsFor: (date: string) => CalendarItem[];
   onItemPress: (item: CalendarItem) => void;
   onDayPress: (date: string) => void;
+  onToggleTask?: (item: CalendarItem) => void;
 }
 
-export function MonthView({ weeks, month, todayKey, itemsFor, onItemPress, onDayPress }: Props) {
+export function MonthView({ weeks, month, todayKey, itemsFor, onItemPress, onDayPress, onToggleTask }: Props) {
   const type = useType();
   const accent = useAccent();
 
@@ -88,9 +90,19 @@ export function MonthView({ weeks, month, todayKey, itemsFor, onItemPress, onDay
                             clickable && hoverStyles.pointer,
                             active && hoverStyles.raised,
                             state.pressed && hoverStyles.pressedDim,
+                            item.done && styles.doneItem,
                           ];
                         }}
                       >
+                        {item.source.kind === 'task' ? (
+                          <RoundCheck
+                            done={item.done}
+                            color={tint.text}
+                            size={11}
+                            label={`${item.done ? 'Mark not done' : 'Mark done'}: ${item.title}`}
+                            onToggle={() => onToggleTask?.(item)}
+                          />
+                        ) : null}
                         <Text
                           style={[type.body, styles.itemText, { color: tint.text }, item.done && styles.doneText]}
                           numberOfLines={1}
@@ -135,8 +147,18 @@ const styles = StyleSheet.create({
   dayNumber: { minWidth: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
   dayNumberText: { fontSize: 13 },
   outsideText: { color: colors.textMuted, opacity: 0.6 },
-  item: { borderRadius: radius.square, borderWidth: 1, borderLeftWidth: 3, paddingHorizontal: 5, paddingVertical: 2 },
-  itemText: { fontSize: 11, lineHeight: 15 },
+  item: {
+    borderRadius: radius.square,
+    borderWidth: 1,
+    borderLeftWidth: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  itemText: { flex: 1, minWidth: 0, fontSize: 11, lineHeight: 15 },
+  doneItem: { opacity: 0.55 },
   doneText: { textDecorationLine: 'line-through', opacity: 0.7 },
   more: { paddingHorizontal: 5, paddingVertical: 1 },
   moreText: { fontSize: 11, color: colors.textMuted },

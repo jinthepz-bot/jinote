@@ -23,12 +23,14 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { JournalScreen } from '../screens/JournalScreen';
 import { ScheduleScreen } from '../screens/ScheduleScreen';
 import { setCoachPanelCollapsed } from './coachPanelStore';
+import { CoachPanel } from './CoachPanel';
 import {
   COACH_PANEL_COLLAPSED_WIDTH,
   COACH_PANEL_WIDTH,
   useCoachPanelCollapsed,
   useIsDesktop,
 } from './layout';
+import { RightSheetHost } from './RightSheet';
 import { SettingsHost } from './SettingsHost';
 import { Sidebar, type JournalSection, type SidebarTarget } from './Sidebar';
 
@@ -36,7 +38,8 @@ export type RootTabParamList = {
   Home: undefined;
   Goals: undefined;
   // `n` changes on every sidebar click so choosing the same section twice still applies it.
-  Journal: { section?: JournalSection; n?: number } | undefined;
+  // `noteId` opens that note as a page (desktop only).
+  Journal: { section?: JournalSection; noteId?: string; n?: number } | undefined;
   Schedule: undefined;
   Chat: undefined;
 };
@@ -131,16 +134,20 @@ export function RootNavigator() {
   const navRef = useNavigationContainerRef<RootTabParamList>();
   const [route, setRoute] = useState<string>('Home');
   const [journalSection, setJournalSection] = useState<JournalSection | undefined>();
+  const [openNoteId, setOpenNoteId] = useState<string | undefined>();
 
   const syncRoute = () => {
     const current = navRef.getCurrentRoute();
+    const params = current?.name === 'Journal' ? (current.params as RootTabParamList['Journal']) : undefined;
     setRoute(current?.name ?? 'Home');
-    setJournalSection(current?.name === 'Journal' ? (current.params as { section?: JournalSection } | undefined)?.section : undefined);
+    setJournalSection(params?.section);
+    setOpenNoteId(params?.noteId);
   };
 
   const navigate = (target: SidebarTarget) => {
-    if (target.screen === 'Journal') navRef.navigate('Journal', { section: target.section, n: Date.now() });
-    else navRef.navigate(target.screen);
+    if (target.screen === 'Journal') {
+      navRef.navigate('Journal', { section: target.section, noteId: target.noteId, n: Date.now() });
+    } else navRef.navigate(target.screen);
   };
 
   const tabs = (
@@ -174,28 +181,34 @@ export function RootNavigator() {
     <NavigationContainer ref={navRef} theme={navigationTheme(accent.accent)} onStateChange={syncRoute}>
       <SettingsHost>
         {desktop ? (
-          <View style={styles.desktop}>
-            <Sidebar route={route} journalSection={journalSection} onNavigate={navigate} />
-            <View style={styles.main}>{tabs}</View>
-            {coachCollapsed ? (
-              <View style={styles.coachStrip}>
-                <Pressable
-                  onPress={() => setCoachPanelCollapsed(false)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Show coach panel"
-                  style={(state) => [styles.coachStripButton, hoverFill(state)]}
-                >
-                  <Ionicons name="chatbubble-ellipses-outline" size={20} color={accent.accent} />
-                </Pressable>
-              </View>
-            ) : (
-              <View style={styles.coach}>
-                {/* Collapsing only unmounts the panel's view — the chat state lives in
-                    useAgentChat's store, so reopening it shows the same conversation. */}
-                <ChatScreen embedded onCollapse={() => setCoachPanelCollapsed(true)} />
-              </View>
-            )}
-          </View>
+          <RightSheetHost>
+            <View style={styles.desktop}>
+              <Sidebar route={route} journalSection={journalSection} openNoteId={openNoteId} onNavigate={navigate} />
+              <View style={styles.main}>{tabs}</View>
+              {coachCollapsed ? (
+                <View style={styles.coachStrip}>
+                  <Pressable
+                    onPress={() => setCoachPanelCollapsed(false)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Show coach panel"
+                    style={(state) => [styles.coachStripButton, hoverFill(state)]}
+                  >
+                    <Ionicons name="chatbubble-ellipses-outline" size={20} color={accent.accent} />
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={styles.coach}>
+                  {/* Collapsing only unmounts the panel's view — the chat state lives in
+                      useAgentChat's store, so reopening it shows the same conversation. */}
+                  <CoachPanel
+                    route={route}
+                    openNoteId={openNoteId}
+                    onCollapse={() => setCoachPanelCollapsed(true)}
+                  />
+                </View>
+              )}
+            </View>
+          </RightSheetHost>
         ) : (
           tabs
         )}

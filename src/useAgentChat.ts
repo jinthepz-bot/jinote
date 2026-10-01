@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { backend } from './agent';
 import { buildCoachContext } from './agent/context';
+import { describeScreen, type CoachScreen } from './agent/screen';
+import { runUndo } from './agent/undo';
 import { TurnError } from './agent/types';
 import { dayKey } from './coach/days';
 import { getCoachState } from './coach/store';
@@ -33,7 +35,8 @@ export function useAgentChat() {
     if (loaded) saveMessages(messages);
   }, [messages, loaded]);
 
-  const send = useCallback(async (raw: string) => {
+  // `screen` (desktop only) is what the user is looking at; see agent/screen.ts.
+  const send = useCallback(async (raw: string, screen?: CoachScreen) => {
     const text = raw.trim();
     if (!text || abortRef.current) return;
 
@@ -47,8 +50,11 @@ export function useAgentChat() {
     setActivity({ kind: 'thinking' });
 
     try {
-      // Fresh snapshot of the user's data for this turn.
-      const context = buildCoachContext(getCoachState(), getNotesState().notes, getScheduleState().events, dayKey());
+      // Fresh snapshot of the user's data for this turn, plus what's on screen.
+      const today = dayKey();
+      const events = getScheduleState().events;
+      const state = buildCoachContext(getCoachState(), getNotesState().notes, events, today);
+      const context = screen ? `${state}\n\n${describeScreen(screen, events, today)}` : state;
       const reply = await backend.respond(history, context, signal);
       setMessages((prev) => [
         ...prev,
@@ -82,10 +88,26 @@ export function useAgentChat() {
     abortRef.current?.abort();
   }, []);
 
+  // Takes back one change from a receipt and remembers that it was undone, so the
+  // receipt says so after a reload too.
+  const undo = useCallback((messageId: string, actionIndex: number) => {
+    const message = messagesRef.current.find((m) => m.id === messageId);
+    const action = message?.actions?.[actionIndex];
+    if (!action?.undo || action.undone) return;
+    runUndo(action.undo);
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId && m.actions
+          ? { ...m, actions: m.actions.map((a, i) => (i === actionIndex ? { ...a, undone: true } : a)) }
+          : m,
+      ),
+    );
+  }, []);
+
   const clear = useCallback(() => {
     abortRef.current?.abort();
     setMessages([]);
   }, []);
 
-  return { messages, activity, loaded, send, stop, clear };
+  return { messages, activity, loaded, send, stop, clear, undo };
 }

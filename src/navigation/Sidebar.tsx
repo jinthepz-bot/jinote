@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useTodayKey } from '../coach/useTodayKey';
 import { useAccent } from '../design/accent';
@@ -7,6 +7,8 @@ import { hoverFill } from '../design/hover';
 import { useType } from '../design/fonts';
 import { colors, radius, spacing } from '../design/theme';
 import type { IconName } from '../design/ui';
+import { noteTitle } from '../notes/format';
+import { pinnedNotes, useNotes, type NoteType } from '../notes/store';
 import type { CalendarKind } from '../schedule/calendar/items';
 import { kindColors } from '../schedule/calendar/kindColors';
 import { goToDay, toggleFilter, useCalendarView, type CalendarFilters } from '../schedule/calendar/viewStore';
@@ -18,7 +20,7 @@ export type JournalSection = 'quick' | 'checklist' | 'recipe' | 'buy';
 
 export type SidebarTarget =
   | { screen: 'Home' | 'Schedule' | 'Goals' }
-  | { screen: 'Journal'; section?: JournalSection };
+  | { screen: 'Journal'; section?: JournalSection; noteId?: string };
 
 const NAV: { label: string; icon: IconName; target: SidebarTarget }[] = [
   { label: 'Today', icon: 'sunny-outline', target: { screen: 'Home' } },
@@ -34,17 +36,31 @@ const JOURNAL_LINKS: { label: string; section: JournalSection }[] = [
   { label: 'To-buy', section: 'buy' },
 ];
 
+const NOTE_ICONS: Record<NoteType, IconName> = {
+  quick: 'document-text-outline',
+  checklist: 'checkbox-outline',
+  recipe: 'restaurant-outline',
+};
+
 interface Props {
   route: string; // the active tab's name
   journalSection: JournalSection | undefined;
+  openNoteId: string | undefined; // the note open as a page on Journal, if any
   onNavigate: (target: SidebarTarget) => void;
 }
 
-export function Sidebar({ route, journalSection, onNavigate }: Props) {
+export function Sidebar({ route, journalSection, openNoteId, onNavigate }: Props) {
   const type = useType();
   const accent = useAccent();
   const { open: openSettings } = useSettings();
+  const { state: notesState } = useNotes();
   const inJournal = route === 'Journal';
+  const pinned = pinnedNotes(notesState.notes);
+
+  // With a note open, the sub-link for its kind stays lit, so the sidebar agrees with
+  // the page's breadcrumb ("Journal / Quick notes / ...").
+  const openNote = inJournal && openNoteId ? notesState.notes.find((n) => n.id === openNoteId) : undefined;
+  const activeSection: JournalSection | undefined = openNote ? openNote.type : journalSection;
 
   return (
     <View style={styles.root}>
@@ -59,40 +75,59 @@ export function Sidebar({ route, journalSection, onNavigate }: Props) {
         <Text style={[type.label, styles.kbd]}>⌘K</Text>
       </View>
 
-      <View style={styles.nav}>
-        {NAV.map((item) => {
-          const active = route === item.target.screen;
-          return (
-            <View key={item.label}>
+      {/* The part that can outgrow a short window: nav, pinned notes, schedule tools. */}
+      <ScrollView style={styles.middle} contentContainerStyle={styles.middleContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.nav}>
+          {NAV.map((item) => {
+            const active = route === item.target.screen;
+            return (
+              <View key={item.label}>
+                <NavLink
+                  label={item.label}
+                  icon={item.icon}
+                  active={active && !(inJournal && activeSection)}
+                  activeColor={accent.accent}
+                  onPress={() => onNavigate(item.target)}
+                />
+                {item.target.screen === 'Journal' && (
+                  <View style={styles.subList}>
+                    {JOURNAL_LINKS.map((link) => (
+                      <NavLink
+                        key={link.section}
+                        label={link.label}
+                        sub
+                        active={inJournal && activeSection === link.section}
+                        activeColor={accent.accent}
+                        onPress={() => onNavigate({ screen: 'Journal', section: link.section })}
+                      />
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          })}
+        </View>
+
+        {pinned.length > 0 ? (
+          <View style={styles.pinned}>
+            <Text style={[type.label, styles.blockLabel]}>Pinned</Text>
+            {pinned.map((note) => (
               <NavLink
-                label={item.label}
-                icon={item.icon}
-                active={active && !(inJournal && journalSection)}
+                key={note.id}
+                label={noteTitle(note)}
+                icon={NOTE_ICONS[note.type]}
+                sub
+                active={inJournal && openNoteId === note.id}
                 activeColor={accent.accent}
-                onPress={() => onNavigate(item.target)}
+                onPress={() => onNavigate({ screen: 'Journal', noteId: note.id })}
               />
-              {item.target.screen === 'Journal' && (
-                <View style={styles.subList}>
-                  {JOURNAL_LINKS.map((link) => (
-                    <NavLink
-                      key={link.section}
-                      label={link.label}
-                      sub
-                      active={inJournal && journalSection === link.section}
-                      activeColor={accent.accent}
-                      onPress={() => onNavigate({ screen: 'Journal', section: link.section })}
-                    />
-                  ))}
-                </View>
-              )}
-            </View>
-          );
-        })}
-      </View>
+            ))}
+          </View>
+        ) : null}
 
-      {route === 'Schedule' ? <ScheduleTools /> : null}
+        {route === 'Schedule' ? <ScheduleTools /> : null}
+      </ScrollView>
 
-      <View style={styles.spacer} />
       <NavLink label="Settings" icon="settings-outline" activeColor={accent.accent} onPress={openSettings} />
     </View>
   );
@@ -177,7 +212,12 @@ function NavLink({
       style={(state) => [styles.link, sub && styles.linkSub, active && styles.linkActive, hoverFill(state)]}
     >
       {icon ? <Ionicons name={icon} size={17} color={tint} /> : null}
-      <Text style={[active ? type.bodyStrong : type.body, { color: tint, fontSize: sub ? 14 : 15 }]}>{label}</Text>
+      <Text
+        style={[active ? type.bodyStrong : type.body, styles.linkText, { color: tint, fontSize: sub ? 14 : 15 }]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -222,7 +262,11 @@ const styles = StyleSheet.create({
   showBox: { width: 16, height: 16, borderRadius: 4, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   showText: { fontSize: 13 },
   showTextOff: { color: colors.textMuted },
-  spacer: { flex: 1 },
+  middle: { flex: 1, marginHorizontal: -spacing.xs },
+  middleContent: { gap: spacing.lg, paddingHorizontal: spacing.xs },
+  pinned: { gap: 2, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md },
+  blockLabel: { paddingHorizontal: spacing.sm + 2, paddingBottom: 4 },
+  linkText: { flexShrink: 1 },
   link: {
     flexDirection: 'row',
     alignItems: 'center',

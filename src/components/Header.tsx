@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAccent } from '../design/accent';
@@ -12,9 +13,10 @@ interface Props {
   onClear: () => void;
   action?: React.ReactNode; // the shared top-right screen control (Settings)
   compact?: boolean; // the desktop coach panel: a smaller headline
+  sees?: string; // the desktop coach panel: what it's looking at ("Schedule · 21–27 Sep")
 }
 
-export function Header({ activity, mock, canClear, onClear, action, compact }: Props) {
+export function Header({ activity, mock, canClear, onClear, action, compact, sees }: Props) {
   const type = useType();
   const accent = useAccent();
   const busy = activity.kind !== 'idle';
@@ -50,6 +52,14 @@ export function Header({ activity, mock, canClear, onClear, action, compact }: P
       <Text style={[type.display, styles.title, compact && styles.titleCompact]} numberOfLines={1} adjustsFontSizeToFit accessibilityRole="header">
         CHAT
       </Text>
+      {sees ? (
+        <View style={styles.seesRow} accessibilityLabel={`The coach sees: ${sees}`}>
+          <Ionicons name="eye-outline" size={13} color={colors.textMuted} />
+          <Text style={[type.body, styles.sees]} numberOfLines={1}>
+            Sees: {sees}
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -79,4 +89,6 @@ const styles = StyleSheet.create({
   // Matches ScreenTitle's headline on the other screens.
   title: { fontSize: 56, lineHeight: 62, letterSpacing: 1.5 },
   titleCompact: { fontSize: 32, lineHeight: 38, letterSpacing: 0 },
+  seesRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  sees: { flexShrink: 1, fontSize: 12, color: colors.textMuted },
 });

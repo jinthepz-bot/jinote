@@ -3,31 +3,32 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
-  addDays,
   daysInMonth,
   formatDayKey,
   makeDayKey,
   MONTH_NAMES,
   parseDayKey,
-  startOfWeek,
   weekdayIndex,
 } from '../coach/days';
 import { useAccent } from '../design/accent';
-import { hoverFill } from '../design/hover';
+import { hoverFill, hoverStyles, pointerState } from '../design/hover';
 import { useType } from '../design/fonts';
-import { colors, radius, spacing } from '../design/theme';
+import { colors, radius, rgba, spacing } from '../design/theme';
 
 const WEEK_HEADER = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-// The sidebar's month, for jumping the calendar around. It's a sibling of
-// home/MonthCalendar rather than a reuse of it: that one is a date *picker* (past days
-// disabled, big touch targets, no sense of a selected week), this one navigates.
+// A small month for choosing a day: the sidebar's calendar navigator, and the date
+// picker in the desktop event sheet. It's a sibling of home/MonthCalendar rather than
+// a reuse of it: that one disables past days and has phone-sized touch targets.
+//
+// Nothing here marks a whole week or row. The only per-day states are today (filled
+// circle), the selected day (ring) and the day under the pointer (soft circle).
 export function MiniMonth({
   anchor,
   todayKey,
   onSelect,
 }: {
-  anchor: string; // the day the calendar is showing; its week is highlighted
+  anchor: string; // the selected day, drawn with a ring; the month shown follows it
   todayKey: string;
   onSelect: (day: string) => void;
 }) {
@@ -57,9 +58,6 @@ export function MiniMonth({
     ...Array.from({ length: daysInMonth(view.year, view.month) }, (_, i) => makeDayKey(view.year, view.month, i + 1)),
   ];
   while (cells.length % 7 !== 0) cells.push(null);
-
-  const weekStart = startOfWeek(anchor);
-  const weekEnd = addDays(weekStart, 6);
 
   return (
     <View style={styles.root}>
@@ -97,28 +95,37 @@ export function MiniMonth({
           if (!key) return <View key={`blank-${i}`} style={styles.cell} />;
           const isToday = key === todayKey;
           const isSelected = key === anchor;
-          const inWeek = key >= weekStart && key <= weekEnd;
           return (
             <Pressable
               key={key}
               onPress={() => onSelect(key)}
-              style={(state) => [styles.cell, inWeek && styles.inWeek, hoverFill(state)]}
+              // The square cell never changes on hover; only the date's own circle does.
+              style={[styles.cell, hoverStyles.pointer]}
               accessibilityRole="button"
               accessibilityLabel={formatDayKey(key, todayKey)}
               accessibilityState={{ selected: isSelected }}
             >
-              {/* Today is always the filled circle; the ring is wherever you're looking. */}
-              <View
-                style={[
-                  styles.day,
-                  isToday && { backgroundColor: accent.accent },
-                  isSelected && [styles.selectedDay, { borderColor: accent.accent }],
-                ]}
-              >
-                <Text style={[type.body, styles.dayText, isToday && { color: accent.onAccent }]}>
-                  {Number(key.slice(8))}
-                </Text>
-              </View>
+              {(state) => {
+                const { hovered, pressed } = pointerState(state);
+                return (
+                  // Today is always the filled circle; the ring is wherever you're looking.
+                  // Hover and press only tint this one date's circle.
+                  <View
+                    style={[
+                      styles.day,
+                      !isToday && hovered && styles.dayHovered,
+                      !isToday && pressed && styles.dayPressed,
+                      isToday && { backgroundColor: accent.accent },
+                      isToday && (hovered || pressed) && hoverStyles.hoveredDim,
+                      isSelected && [styles.selectedDay, { borderColor: accent.accent }],
+                    ]}
+                  >
+                    <Text style={[type.body, styles.dayText, isToday && { color: accent.onAccent }]}>
+                      {Number(key.slice(8))}
+                    </Text>
+                  </View>
+                );
+              }}
             </Pressable>
           );
         })}
@@ -134,9 +141,10 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   headCell: { width: `${100 / 7}%`, textAlign: 'center', fontSize: 9, letterSpacing: 0, paddingBottom: 2 },
   cell: { width: `${100 / 7}%`, height: 26, alignItems: 'center', justifyContent: 'center' },
-  inWeek: { backgroundColor: colors.surface, borderRadius: radius.square },
   day: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   selectedDay: { borderWidth: 1.5 },
+  dayHovered: { backgroundColor: rgba(colors.text, 0.1) },
+  dayPressed: { backgroundColor: rgba(colors.text, 0.18) },
   monthArrow: { width: 20, height: 20, borderRadius: radius.square, alignItems: 'center', justifyContent: 'center' },
   dayText: { fontSize: 12 },
 });

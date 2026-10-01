@@ -3,14 +3,15 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { confirmDestructive } from '../design/confirm';
-import { hoverDim } from '../design/hover';
+import { hoverDim, hoverFill } from '../design/hover';
 import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
 import { colors, radius, sizes, spacing, keyboardAppearance } from '../design/theme';
 import { Card, Checkbox, IconButton, RowIconButton } from '../design/ui';
 import { addChecklistItem, deleteChecklistItem, deleteNote, toggleChecklistItem, type ChecklistNote } from './store';
 
-export function ChecklistCard({ note }: { note: ChecklistNote }) {
+// `onOpen` (desktop only) makes the title a link to the checklist's own page.
+export function ChecklistCard({ note, onOpen }: { note: ChecklistNote; onOpen?: () => void }) {
   const type = useType();
   const accent = useAccent();
   const [draft, setDraft] = useState('');
@@ -33,9 +34,22 @@ export function ChecklistCard({ note }: { note: ChecklistNote }) {
   return (
     <Card style={styles.card}>
       <View style={styles.header}>
-        <Text style={type.bodyStrong} numberOfLines={2}>
-          {note.title}
-        </Text>
+        {onOpen ? (
+          <Pressable
+            onPress={onOpen}
+            accessibilityRole="link"
+            accessibilityLabel={`Open "${note.title}"`}
+            style={(s) => [styles.open, hoverFill(s)]}
+          >
+            <Text style={type.bodyStrong} numberOfLines={2}>
+              {note.title}
+            </Text>
+          </Pressable>
+        ) : (
+          <Text style={type.bodyStrong} numberOfLines={2}>
+            {note.title}
+          </Text>
+        )}
         <View style={styles.headerRight}>
           <Text style={type.label}>
             {doneCount}/{note.items.length}
@@ -105,6 +119,7 @@ const styles = StyleSheet.create({
   card: { gap: spacing.sm },
   header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  open: { flexShrink: 1, marginLeft: -6, paddingHorizontal: 6, paddingVertical: 4, borderRadius: 6 },
   empty: { color: colors.textMuted },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
   divider: { borderTopWidth: 1, borderTopColor: colors.border },

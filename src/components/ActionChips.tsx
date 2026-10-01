@@ -15,6 +15,7 @@ const GLYPHS: Record<ActionKind, string> = {
   journal_saved: '✎',
   event_added: '▤',
   event_deleted: '✕',
+  event_moved: '↦',
   note_saved: '✎',
   recipe_saved: '▦',
 };

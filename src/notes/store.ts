@@ -11,6 +11,8 @@ export interface QuickNote {
   type: 'quick';
   text: string;
   createdAt: number;
+  updatedAt: number; // last content change; notes from before this existed use createdAt
+  pinnedAt: number | null; // when it was pinned to the desktop sidebar, or null
 }
 
 export interface ChecklistItem {
@@ -25,6 +27,8 @@ export interface ChecklistNote {
   title: string;
   items: ChecklistItem[];
   createdAt: number;
+  updatedAt: number; // last content change; notes from before this existed use createdAt
+  pinnedAt: number | null; // when it was pinned to the desktop sidebar, or null
 }
 
 export interface RecipeNote {
@@ -39,6 +43,8 @@ export interface RecipeNote {
   steps: string[];
   notes: string; // free text: cook time, servings, where it's from, etc.
   createdAt: number;
+  updatedAt: number; // last content change; notes from before this existed use createdAt
+  pinnedAt: number | null; // when it was pinned to the desktop sidebar, or null
 }
 
 export type Note = QuickNote | ChecklistNote | RecipeNote;
@@ -97,13 +103,23 @@ function normalize(raw: unknown): NotesState {
   for (const n of records(obj.notes)) {
     if (typeof n.id !== 'string' || notes.some((x) => x.id === n.id)) continue;
     const createdAt = isNum(n.createdAt) ? n.createdAt : 0;
+    const updatedAt = isNum(n.updatedAt) ? n.updatedAt : createdAt;
+    const pinnedAt = isNum(n.pinnedAt) ? n.pinnedAt : null;
 
     if (n.type === 'quick') {
       if (typeof n.text !== 'string' || n.text.trim() === '') continue;
-      notes.push({ id: n.id, type: 'quick', text: n.text.trim(), createdAt });
+      notes.push({ id: n.id, type: 'quick', text: n.text.trim(), createdAt, updatedAt, pinnedAt });
     } else if (n.type === 'checklist') {
       if (typeof n.title !== 'string' || n.title.trim() === '') continue;
-      notes.push({ id: n.id, type: 'checklist', title: n.title.trim(), items: normalizeChecklistItems(n.items), createdAt });
+      notes.push({
+        id: n.id,
+        type: 'checklist',
+        title: n.title.trim(),
+        items: normalizeChecklistItems(n.items),
+        createdAt,
+        updatedAt,
+        pinnedAt,
+      });
     } else if (n.type === 'recipe') {
       if (typeof n.title !== 'string' || n.title.trim() === '') continue;
       notes.push({
@@ -118,6 +134,8 @@ function normalize(raw: unknown): NotesState {
         steps: strArray(n.steps),
         notes: str(n.notes),
         createdAt,
+        updatedAt,
+        pinnedAt,
       });
     }
   }
@@ -160,9 +178,21 @@ export const useNotes = () => store.useStore();
 export function addQuickNote(text: string, createdAt: number = Date.now()): QuickNote | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
-  const note: QuickNote = { id: newId('note'), type: 'quick', text: trimmed, createdAt };
+  const note: QuickNote = { id: newId('note'), type: 'quick', text: trimmed, createdAt, updatedAt: createdAt, pinnedAt: null };
   store.update((s) => ({ notes: [note, ...s.notes].sort((a, b) => b.createdAt - a.createdAt) }));
   return note;
+}
+
+// Rewrites a quick note's text from the desktop writing page. An empty note isn't a
+// valid note (the loader would drop it), so clearing everything keeps the last text.
+export function updateQuickNote(id: string, text: string): void {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  store.update((s) => ({
+    notes: s.notes.map((n) =>
+      n.id === id && n.type === 'quick' && n.text !== trimmed ? { ...n, text: trimmed, updatedAt: Date.now() } : n,
+    ),
+  }));
 }
 
 // --- checklists
@@ -174,7 +204,16 @@ export function addChecklist(title: string, itemTexts: string[]): ChecklistNote 
     .map((t) => t.trim())
     .filter(Boolean)
     .map((text) => ({ id: newId('item'), text, done: false }));
-  const note: ChecklistNote = { id: newId('note'), type: 'checklist', title: trimmedTitle, items, createdAt: Date.now() };
+  const now = Date.now();
+  const note: ChecklistNote = {
+    id: newId('note'),
+    type: 'checklist',
+    title: trimmedTitle,
+    items,
+    createdAt: now,
+    updatedAt: now,
+    pinnedAt: null,
+  };
   store.update((s) => ({ notes: [note, ...s.notes] }));
   return note;
 }
@@ -183,7 +222,7 @@ export function toggleChecklistItem(noteId: string, itemId: string): void {
   store.update((s) => ({
     notes: s.notes.map((n) =>
       n.id === noteId && n.type === 'checklist'
-        ? { ...n, items: n.items.map((i) => (i.id === itemId ? { ...i, done: !i.done } : i)) }
+        ? { ...n, items: n.items.map((i) => (i.id === itemId ? { ...i, done: !i.done } : i)), updatedAt: Date.now() }
         : n,
     ),
   }));
@@ -195,7 +234,7 @@ export function addChecklistItem(noteId: string, text: string): void {
   store.update((s) => ({
     notes: s.notes.map((n) =>
       n.id === noteId && n.type === 'checklist'
-        ? { ...n, items: [...n.items, { id: newId('item'), text: trimmed, done: false }] }
+        ? { ...n, items: [...n.items, { id: newId('item'), text: trimmed, done: false }], updatedAt: Date.now() }
         : n,
     ),
   }));
@@ -203,7 +242,11 @@ export function addChecklistItem(noteId: string, text: string): void {
 
 export function deleteChecklistItem(noteId: string, itemId: string): void {
   store.update((s) => ({
-    notes: s.notes.map((n) => (n.id === noteId && n.type === 'checklist' ? { ...n, items: n.items.filter((i) => i.id !== itemId) } : n)),
+    notes: s.notes.map((n) =>
+      n.id === noteId && n.type === 'checklist'
+        ? { ...n, items: n.items.filter((i) => i.id !== itemId), updatedAt: Date.now() }
+        : n,
+    ),
   }));
 }
 
@@ -224,12 +267,27 @@ export function addRecipe(input: NewRecipeInput): RecipeNote | null {
     steps: input.steps.map((s) => s.trim()).filter(Boolean),
     notes: input.notes.trim(),
     createdAt: Date.now(),
+    updatedAt: Date.now(),
+    pinnedAt: null,
   };
   store.update((s) => ({ notes: [note, ...s.notes] }));
   return note;
 }
 
 // --- shared
+
+// Pinning is about where a note is kept, not what it says, so it leaves updatedAt alone.
+export function setPinned(id: string, pinned: boolean): void {
+  store.update((s) => ({
+    notes: s.notes.map((n) => (n.id === id ? { ...n, pinnedAt: pinned ? Date.now() : null } : n)),
+  }));
+}
+
+// Pinned notes in the order they were pinned, oldest first, so the sidebar list
+// doesn't reshuffle every time something new is pinned.
+export function pinnedNotes(notes: Note[]): Note[] {
+  return notes.filter((n) => n.pinnedAt !== null).sort((a, b) => (a.pinnedAt ?? 0) - (b.pinnedAt ?? 0));
+}
 
 // Deletes a note and returns it. If it was a recipe with a photo, the caller is
 // responsible for also calling `deleteNotePhoto` (see notes/photos.ts) — this store

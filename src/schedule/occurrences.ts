@@ -1,6 +1,6 @@
 import { addDays, weekdayIndex } from '../coach/days';
 import { tasksOnDay, type Task } from '../coach/store';
-import type { ScheduleEvent } from './store';
+import type { OccurrenceChange, ScheduleEvent } from './store';
 import { compareTimes } from './time';
 
 export interface Occurrence {
@@ -14,18 +14,74 @@ export type DayItem =
   | { kind: 'event'; id: string; event: ScheduleEvent }
   | { kind: 'task'; id: string; task: Task };
 
-// Whether `event` occurs on `date`.
-export function occursOn(event: ScheduleEvent, date: string): boolean {
-  if (event.type === 'one-off') return event.date === date;
+// Whether a series' repeat rule alone puts an occurrence on `date` (one-day
+// changes aside).
+function onRule(event: ScheduleEvent, date: string): boolean {
   if (!event.days.includes(weekdayIndex(date))) return false;
   if (event.startDate && date < event.startDate) return false;
   if (event.endDate && date > event.endDate) return false;
   return true;
 }
 
-// Every event occurring on `date`, earliest start time first.
+// One occurrence as it actually happens: `event` carries that day's times (which
+// differ from the series' when it was changed on its own), and `originalDate` is the
+// day the repeat rule put it on — what a one-day change is keyed by.
+export interface ResolvedOccurrence {
+  event: ScheduleEvent;
+  originalDate: string;
+}
+
+// Every occurrence of `event` on `date`, with one-day changes applied: one moved
+// away from `date` is gone, one moved onto it appears with its own times. Usually
+// zero or one, but a changed occurrence can land on a day the series also meets.
+// The series as it is on one occurrence that was changed on its own.
+function applyChange(event: ScheduleEvent, change: OccurrenceChange): ScheduleEvent {
+  return {
+    ...event,
+    startTime: change.startTime,
+    endTime: change.endTime,
+    title: change.title ?? event.title,
+    location: change.location ?? event.location,
+    note: change.note ?? event.note,
+    color: change.color ?? event.color,
+    reminderMinutesBefore: change.reminderMinutesBefore !== undefined ? change.reminderMinutesBefore : event.reminderMinutesBefore,
+  };
+}
+
+export function occurrencesOn(event: ScheduleEvent, date: string): ResolvedOccurrence[] {
+  if (event.type === 'one-off') return event.date === date ? [{ event, originalDate: date }] : [];
+  const out: ResolvedOccurrence[] = [];
+  const own = event.exceptions[date];
+  if (onRule(event, date)) {
+    if (!own) out.push({ event, originalDate: date });
+    else if (own.date === date && !own.skipped) out.push({ event: applyChange(event, own), originalDate: date });
+  }
+  for (const [original, change] of Object.entries(event.exceptions)) {
+    // A change whose own day no longer fits the rule (the series was edited since)
+    // is ignored rather than conjuring an occurrence out of nowhere.
+    if (original === date || change.skipped || change.date !== date || !onRule(event, original)) continue;
+    out.push({ event: applyChange(event, change), originalDate: original });
+  }
+  return out;
+}
+
+// Whether `event` happens on `date` at all.
+export function occursOn(event: ScheduleEvent, date: string): boolean {
+  return occurrencesOn(event, date).length > 0;
+}
+
+// Every occurrence on `date` across `events`, earliest start first.
+export function eventOccurrencesOnDay(events: ScheduleEvent[], date: string): ResolvedOccurrence[] {
+  return events
+    .flatMap((e) => occurrencesOn(e, date))
+    .sort((a, b) => compareTimes(a.event.startTime, b.event.startTime));
+}
+
+// Every event happening on `date`, earliest start first, each carrying that day's
+// actual times — so everything that lists a day (Today, the coach, reminders) sees an
+// occurrence where it was moved to, not where the series would have put it.
 export function eventsOnDay(events: ScheduleEvent[], date: string): ScheduleEvent[] {
-  return events.filter((e) => occursOn(e, date)).sort((a, b) => compareTimes(a.startTime, b.startTime));
+  return eventOccurrencesOnDay(events, date).map((o) => o.event);
 }
 
 // Events and dated tasks due on `date`, merged into one time-ordered list. Untimed
@@ -44,11 +100,11 @@ export function agendaForDay(events: ScheduleEvent[], tasks: Task[], date: strin
 export function nextOccurrence(event: ScheduleEvent, from: string): string | null {
   if (event.type === 'one-off') return event.date && event.date >= from ? event.date : null;
   const start = event.startDate && event.startDate > from ? event.startDate : from;
-  if (event.endDate && start > event.endDate) return null;
-  for (let i = 0; i < 7; i++) {
+  // Two weeks rather than one, and no early stop at the end date: with one-day
+  // changes an occurrence can be moved past either.
+  for (let i = 0; i < 14; i++) {
     const candidate = addDays(start, i);
-    if (event.endDate && candidate > event.endDate) return null;
-    if (event.days.includes(weekdayIndex(candidate))) return candidate;
+    if (occursOn(event, candidate)) return candidate;
   }
   return null;
 }
@@ -72,7 +128,8 @@ export function upcomingOccurrences(events: ScheduleEvent[], from: string, limit
   return events
     .map((event) => {
       const date = nextOccurrence(event, from);
-      return date ? { event, date } : null;
+      // That day's own times, in case the occurrence was changed on its own.
+      return date ? { event: occurrencesOn(event, date)[0]?.event ?? event, date } : null;
     })
     .filter((o): o is Occurrence => o !== null)
     .sort((a, b) => a.date.localeCompare(b.date) || compareTimes(a.event.startTime, b.event.startTime))

@@ -1,11 +1,16 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { FlatList, KeyboardAvoidingView, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { screenLabel, screenSuggestions, type CoachScreen } from '../agent/screen';
+import { getFeaturedGoal, useCoach } from '../coach/store';
+import { useTodayKey } from '../coach/useTodayKey';
+import { CoachProgress } from '../components/CoachProgress';
 import { Composer } from '../components/Composer';
 import { Header } from '../components/Header';
 import { MessageBubble, ThinkingBubble } from '../components/MessageBubble';
+import { SuggestionChips } from '../components/SuggestionChips';
 import { TaskCard } from '../components/TaskCard';
 import { useMock } from '../config';
 import { confirmDestructive } from '../design/confirm';
@@ -62,10 +67,42 @@ function CollapseButton({ onPress }: { onPress: () => void }) {
 // `embedded` is the desktop coach panel: no safe-area padding, no Settings gear
 // (the sidebar has one), a compact header, and a button to collapse the panel.
 // The chat logic is the same hook.
-export function ChatScreen({ embedded = false, onCollapse }: { embedded?: boolean; onCollapse?: () => void }) {
-  const { messages, activity, loaded, send, stop, clear } = useAgentChat();
+//
+// `screen` (embedded only) is what the user is looking at: shown as "Sees: …", sent
+// with each message, and used to pick the suggestion chips.
+export function ChatScreen({
+  embedded = false,
+  onCollapse,
+  screen,
+}: {
+  embedded?: boolean;
+  onCollapse?: () => void;
+  screen?: CoachScreen;
+}) {
+  const { messages, activity, loaded, send: sendRaw, stop, clear, undo } = useAgentChat();
+  const todayKey = useTodayKey();
+  const coach = useCoach();
+  // Read at send time, so a message goes with the screen the user is on right then.
+  const screenRef = useRef(screen);
+  screenRef.current = screen;
+  const send = (text: string) => sendRaw(text, screenRef.current);
+  const suggestions = embedded && screen && coach.loaded ? screenSuggestions(screen, getFeaturedGoal(coach.state)) : [];
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<AppMessage>>(null);
+
+  // A new message (and the receipts under it) can finish laying out after the list's
+  // own content-size scroll has run, leaving the newest reply half hidden. Scrolling
+  // again once things settle keeps the latest reply and its receipts in view.
+  useEffect(() => {
+    const soon = setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
+    // A second, instant pass for a long history on first load, whose rows keep
+    // measuring in after the first scroll has already stopped.
+    const settled = setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 400);
+    return () => {
+      clearTimeout(soon);
+      clearTimeout(settled);
+    };
+  }, [messages.length, activity.kind]);
 
   const confirmClear = () =>
     confirmDestructive({
@@ -84,14 +121,20 @@ export function ChatScreen({ embedded = false, onCollapse }: { embedded?: boolea
         onClear={confirmClear}
         action={embedded ? onCollapse && <CollapseButton onPress={onCollapse} /> : <SettingsButton />}
         compact={embedded}
+        sees={embedded && screen ? screenLabel(screen, todayKey) : undefined}
       />
+      {embedded ? <CoachProgress /> : null}
       <KeyboardAvoidingView style={styles.flex} behavior="padding">
         <FlatList
           ref={listRef}
           data={messages}
           keyExtractor={(m) => m.id}
           renderItem={({ item }) =>
-            item.kind === 'task' ? <TaskCard task={item} /> : <MessageBubble message={item} />
+            item.kind === 'task' ? (
+              <TaskCard task={item} />
+            ) : (
+              <MessageBubble message={item} receipts={embedded} onUndo={(i) => undo(item.id, i)} />
+            )
           }
           contentContainerStyle={styles.list}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
@@ -100,6 +143,7 @@ export function ChatScreen({ embedded = false, onCollapse }: { embedded?: boolea
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
         />
+        {embedded ? <SuggestionChips suggestions={suggestions} disabled={activity.kind !== 'idle'} onPick={send} /> : null}
         <Composer busy={activity.kind !== 'idle'} onSend={send} onStop={stop} />
       </KeyboardAvoidingView>
     </View>

@@ -1,7 +1,7 @@
 import { formatTime } from '../../coach/days';
 import { goalActivityName } from '../../coach/goal';
 import type { CoachState, Goal, LogEntry, Task } from '../../coach/store';
-import { eventsOnDay } from '../occurrences';
+import { eventOccurrencesOnDay } from '../occurrences';
 import type { ScheduleEvent } from '../store';
 import { minutesOf } from '../time';
 import type { CalendarFilters } from './viewStore';
@@ -18,7 +18,9 @@ export type CalendarKind = 'event' | 'task' | 'session' | 'deadline';
 // What to reopen when the block is clicked. Sessions and deadlines have no form of
 // their own, so they aren't clickable.
 export type CalendarSource =
-  | { kind: 'event'; event: ScheduleEvent }
+  // `event` has this occurrence's own times; `occurrenceDate` is the day the series
+  // put it on, which a one-day change ("Only this event") is keyed by.
+  | { kind: 'event'; event: ScheduleEvent; occurrenceDate: string }
   | { kind: 'task'; task: Task }
   | { kind: 'session'; entry: LogEntry }
   | { kind: 'deadline'; goal: Goal };
@@ -47,10 +49,12 @@ export function itemsOnDay(data: CalendarData, date: string, filters: CalendarFi
   const items: CalendarItem[] = [];
 
   if (filters.events) {
-    for (const event of eventsOnDay(data.events, date)) {
+    for (const { event, originalDate } of eventOccurrencesOnDay(data.events, date)) {
       const start = minutesOf(event.startTime);
       items.push({
-        id: `event:${event.id}:${date}`,
+        // By original date, so two occurrences of one series on the same day (one
+        // moved onto the other's day) still get distinct ids.
+        id: `event:${event.id}:${originalDate}`,
         kind: 'event',
         title: event.title,
         date,
@@ -58,7 +62,7 @@ export function itemsOnDay(data: CalendarData, date: string, filters: CalendarFi
         end: event.endTime ? minutesOf(event.endTime) : null,
         timeLabel: label(event.startTime, event.endTime),
         done: false,
-        source: { kind: 'event', event },
+        source: { kind: 'event', event, occurrenceDate: originalDate },
       });
     }
   }

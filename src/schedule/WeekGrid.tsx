@@ -6,6 +6,7 @@ import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
 import { colors, radius } from '../design/theme';
 import type { AccentPalette } from '../design/theme';
+import { eventsOnDay } from './occurrences';
 import { minutesOf } from './time';
 import type { EventColor, ScheduleEvent } from './store';
 
@@ -151,18 +152,15 @@ export function WeekGrid({
         <View style={[styles.days, { height: bodyHeight }]}>
           {days.map((day) => {
             const isToday = day === todayKey;
-            const dayEvents = events.filter((event) => {
-              if (event.type === 'one-off') return event.date === day;
-              const weekday = new Date(`${day}T12:00:00`).getDay();
-              return event.days.includes(weekday) && (!event.startDate || day >= event.startDate) && (!event.endDate || day <= event.endDate);
-            });
+            // The shared rule, so an occurrence moved on its own shows where it went.
+            const dayEvents = eventsOnDay(events, day);
             return (
               <View key={day} style={[styles.dayColumn, isToday && { backgroundColor: accent.accentSoft }]}>
                 {Array.from({ length: END_HOUR - START_HOUR }, (_, index) => (
                   <View key={index} style={[styles.hourLine, { top: index * HOUR_HEIGHT }]} />
                 ))}
                 {positionedEvents(dayEvents).map((item) => (
-                  <EventBlock key={item.event.id} item={item} onPress={() => onEventPress(item.event.id)} />
+                  <EventBlock key={`${item.event.id}:${item.event.startTime}`} item={item} onPress={() => onEventPress(item.event.id)} />
                 ))}
                 {isToday && showCurrentLine ? <View style={[styles.currentLine, { top: (currentMinutes / 60) * HOUR_HEIGHT }]} /> : null}
               </View>

@@ -235,7 +235,7 @@ export function logProgress(
   value: number,
   note: string,
   date: string,
-): { isNewBest: boolean; current: number } | null {
+): { isNewBest: boolean; current: number; entryId: string } | null {
   const state = store.get();
   const goal = state.goals.find((g) => g.id === goalId);
   if (!goal || !isNum(value) || value <= 0 || !isDayKey(date)) return null;
@@ -256,7 +256,27 @@ export function logProgress(
   }
 
   store.set({ ...state, entries, goals: state.goals.map((g) => (g.id === goalId ? { ...g, current } : g)) });
-  return { isNewBest, current };
+  return { isNewBest, current, entryId: entry.id };
+}
+
+// Undo for a logged set: removes the entry and puts the goal's number back. A best
+// result returns to what it was before, or to a set logged since if that's higher; a
+// running total just loses this amount.
+export function undoLog(entryId: string, previousCurrent: number) {
+  store.update((s) => {
+    const entry = s.entries.find((e) => e.id === entryId);
+    if (!entry) return s;
+    const entries = s.entries.filter((e) => e.id !== entryId);
+    const goals = s.goals.map((g) => {
+      if (g.id !== entry.goalId) return g;
+      const current =
+        g.type === 'best'
+          ? Math.max(previousCurrent, ...entries.filter((e) => e.goalId === g.id && e.loggedAt > entry.loggedAt).map((e) => e.value))
+          : roundAmount(Math.max(0, g.current - entry.value));
+      return { ...g, current };
+    });
+    return { ...s, entries, goals };
+  });
 }
 
 export function createGoal(input: NewGoalInput): Goal | null {
@@ -299,9 +319,9 @@ export function deleteGoal(goalId: string) {
 
 // --- tasks
 
-export function addTask(text: string, date: string | null = null, time: string | null = null) {
+export function addTask(text: string, date: string | null = null, time: string | null = null): Task | null {
   const trimmed = text.trim();
-  if (!trimmed) return;
+  if (!trimmed) return null;
   const task: Task = {
     id: newId('task'),
     text: trimmed,
@@ -312,6 +332,19 @@ export function addTask(text: string, date: string | null = null, time: string |
     completedAt: null,
   };
   store.update((s) => ({ ...s, tasks: [...s.tasks, task] }));
+  return task;
+}
+
+// Undo support: puts a task back exactly as it was — replacing the current copy, or
+// re-inserting it at `index` if it was deleted — so lists keep their order.
+export function restoreTask(task: Task, index?: number) {
+  store.update((s) => {
+    const existing = s.tasks.findIndex((t) => t.id === task.id);
+    if (existing !== -1) return { ...s, tasks: s.tasks.map((t) => (t.id === task.id ? task : t)) };
+    const tasks = [...s.tasks];
+    tasks.splice(index ?? tasks.length, 0, task);
+    return { ...s, tasks };
+  });
 }
 
 // Tasks due on `date`, earliest time first, undated-time ones (a date with no

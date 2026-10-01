@@ -1,3 +1,5 @@
+import type { ScheduleEvent } from './schedule/store';
+
 // One backend's raw wire messages for a turn (tool calls and results included),
 // stored so later requests can replay the conversation exactly as it happened.
 // Each provider (see src/agent/) defines and validates its own shape; this stays
@@ -22,13 +24,32 @@ export type ActionKind =
   | 'journal_saved' // legacy: emitted by save_journal_entry before Stage 6, kept so old chat history still renders
   | 'event_added'
   | 'event_deleted'
+  | 'event_moved'
   | 'note_saved'
   | 'recipe_saved';
+
+// How to take back one change the coach made. Plain data, not a function, because
+// chat history (and these receipts with it) is saved to storage. See agent/undo.ts.
+export type UndoRecord =
+  | { kind: 'deleteTask'; id: string }
+  | { kind: 'reopenTask'; id: string }
+  | { kind: 'deleteEvent'; id: string }
+  | { kind: 'restoreEvent'; event: ScheduleEvent }
+  | { kind: 'deleteBuyItem'; id: string }
+  | { kind: 'unbuy'; id: string }
+  | { kind: 'deleteNote'; id: string }
+  | { kind: 'removeLog'; entryId: string; previousCurrent: number }
+  | { kind: 'deleteGoal'; id: string }
+  | { kind: 'setDeadline'; goalId: string; deadline: string | null };
 
 // A change the assistant made to the user's data, shown in the chat.
 export interface ActionRecord {
   kind: ActionKind;
-  label: string;
+  label: string; // one-line summary; all that older saved messages have
+  area?: string; // "Schedule", "Task", "Goal"… — shown in bold on the receipt
+  detail?: string; // what changed: "Added Gym, Wed 19:00"
+  undo?: UndoRecord;
+  undone?: boolean;
 }
 
 export interface TaskStep {

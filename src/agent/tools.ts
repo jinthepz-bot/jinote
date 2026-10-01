@@ -17,8 +17,17 @@ import {
 import { addChecklist, addQuickNote, addRecipe, getNotesState, searchNotes, type Note } from '../notes/store';
 import { describeEventDays, describeEventTime } from '../schedule/format';
 import { eventsOnDay } from '../schedule/occurrences';
-import { addEvent, deleteEvent, getScheduleState, type EventType, type ScheduleEvent } from '../schedule/store';
-import { isTimeKey } from '../schedule/time';
+import {
+  addEvent,
+  deleteEvent,
+  getScheduleState,
+  retimeEvent,
+  setOccurrenceChange,
+  type EventType,
+  type ScheduleEvent,
+} from '../schedule/store';
+import { occurrencesOn } from '../schedule/occurrences';
+import { isTimeKey, minutesOf, timeFromMinutes } from '../schedule/time';
 import type { ActionRecord } from '../types';
 
 const DAY_FORMAT = 'Local date "YYYY-MM-DD".';
@@ -254,6 +263,26 @@ export const COACH_TOOL_SPECS: ToolSpec[] = [
     required: ['event_id'],
   },
   {
+    name: 'move_event',
+    description:
+      'Move or reschedule an event ("move my next event to 18:00", "push German to Thursday"). For a repeating ' +
+      'event this changes one occurrence only: pass occurrence_date, the day that occurrence currently happens ' +
+      '(from CURRENT STATE or get_schedule). Leave out whatever stays the same; a new start time without an end ' +
+      'time keeps the same length.',
+    properties: {
+      event_id: { type: 'string', description: 'Exact event id from CURRENT STATE or get_schedule.' },
+      occurrence_date: {
+        type: 'string',
+        nullable: true,
+        description: `Required for a repeating event: the day the occurrence to move currently happens. ${DAY_FORMAT}`,
+      },
+      new_date: { type: 'string', nullable: true, description: `Optional new day. ${DAY_FORMAT}` },
+      new_start_time: { type: 'string', nullable: true, description: `Optional new start. ${TIME_FORMAT}` },
+      new_end_time: { type: 'string', nullable: true, description: `Optional new end. ${TIME_FORMAT}` },
+    },
+    required: ['event_id'],
+  },
+  {
     name: 'get_schedule',
     description:
       "Read the user's schedule for a range. Only needed to look further than what's already in CURRENT STATE " +
@@ -371,6 +400,9 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
         {
           kind: 'progress_logged',
           label: `Logged ${formatAmount(value)}${unit} to "${goal.title}"${result.isNewBest ? ' · new best' : ''}`,
+          area: 'Goal',
+          detail: `Logged ${formatAmount(value)}${unit} · ${goal.title}${result.isNewBest ? ' · new best' : ''}`,
+          undo: { kind: 'removeLog', entryId: result.entryId, previousCurrent: goal.current },
         },
       );
     }
@@ -386,7 +418,16 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
       if (rawDeadline && !isDayKey(rawDeadline)) return fail(`deadline "${rawDeadline}" is not valid. ${DAY_FORMAT}`);
       const goal = createGoal({ title, target, type, deadline: rawDeadline ?? null });
       if (!goal) return fail('Could not create that goal.');
-      return ok({ created: describeGoalResult(goal) }, { kind: 'goal_created', label: `Created goal "${goal.title}"` });
+      return ok(
+        { created: describeGoalResult(goal) },
+        {
+          kind: 'goal_created',
+          label: `Created goal "${goal.title}"`,
+          area: 'Goal',
+          detail: `Created "${goal.title}" · target ${formatAmount(goal.target)}`,
+          undo: { kind: 'deleteGoal', id: goal.id },
+        },
+      );
     }
 
     case 'set_deadline': {
@@ -403,6 +444,9 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
           label: raw
             ? `Deadline for "${goal.title}" set to ${formatDayKey(raw)}`
             : `Removed deadline from "${goal.title}"`,
+          area: 'Goal',
+          detail: raw ? `Deadline ${formatDayKey(raw)} · ${goal.title}` : `Deadline removed · ${goal.title}`,
+          undo: { kind: 'setDeadline', goalId: goal.id, deadline: goal.deadline },
         },
       );
     }
@@ -418,12 +462,18 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
 
       const date = rawDate ?? null;
       const time = date ? (rawTime ?? null) : null;
-      addTask(value, date, time);
-      const task = getCoachState().tasks.at(-1)!;
+      const task = addTask(value, date, time);
+      if (!task) return fail('Could not add that task.');
       const when = task.date ? ` for ${formatDayKey(task.date)}${task.time ? ` at ${task.time}` : ''}` : '';
       return ok(
         { added: { id: task.id, text: task.text, date: task.date, time: task.time } },
-        { kind: 'task_added', label: `Added task "${task.text}"${when}` },
+        {
+          kind: 'task_added',
+          label: `Added task "${task.text}"${when}`,
+          area: 'Task',
+          detail: `Added ${task.text}${task.date ? `, ${formatDayKey(task.date)}${task.time ? ` ${task.time}` : ''}` : ''}`,
+          undo: { kind: 'deleteTask', id: task.id },
+        },
       );
     }
 
@@ -435,7 +485,13 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
       toggleTask(task.id);
       return ok(
         { completed: { id: task.id, text: task.text } },
-        { kind: 'task_completed', label: `Completed "${task.text}"` },
+        {
+          kind: 'task_completed',
+          label: `Completed "${task.text}"`,
+          area: 'Task',
+          detail: `Done · ${task.text}`,
+          undo: { kind: 'reopenTask', id: task.id },
+        },
       );
     }
 
@@ -453,6 +509,9 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
         {
           kind: 'buy_added',
           label: `Added "${item.name}" to buy${item.price !== null ? ` · ${formatAmount(item.price)}` : ''}`,
+          area: 'To-buy',
+          detail: `Added ${item.name}${item.price !== null ? ` · ${formatAmount(item.price)}` : ''}`,
+          undo: { kind: 'deleteBuyItem', id: item.id },
         },
       );
     }
@@ -465,7 +524,13 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
       toggleBought(item.id);
       return ok(
         { bought: { id: item.id, name: item.name } },
-        { kind: 'buy_bought', label: `Marked "${item.name}" as bought` },
+        {
+          kind: 'buy_bought',
+          label: `Marked "${item.name}" as bought`,
+          area: 'To-buy',
+          detail: `Bought · ${item.name}`,
+          undo: { kind: 'unbuy', id: item.id },
+        },
       );
     }
 
@@ -480,7 +545,13 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
         if (!note) return fail('Could not save that checklist.');
         return ok(
           { saved: { id: note.id, title: note.title, item_count: note.items.length } },
-          { kind: 'note_saved', label: `Saved checklist "${note.title}"` },
+          {
+            kind: 'note_saved',
+            label: `Saved checklist "${note.title}"`,
+            area: 'Journal',
+            detail: `Checklist "${note.title}" · ${note.items.length} ${note.items.length === 1 ? 'item' : 'items'}`,
+            undo: { kind: 'deleteNote', id: note.id },
+          },
         );
       }
       if (input.type !== 'quick') return fail('type must be "quick" or "checklist".');
@@ -488,7 +559,13 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
       if (!note) return fail('Could not save that note.');
       return ok(
         { saved: { id: note.id, saved_at: `${formatDayKey(dayKey(new Date(note.createdAt)))} ${formatTime(note.createdAt)}` } },
-        { kind: 'note_saved', label: `Saved note: "${truncateLabel(content)}"` },
+        {
+          kind: 'note_saved',
+          label: `Saved note: "${truncateLabel(content)}"`,
+          area: 'Journal',
+          detail: `Quick note · ${truncateLabel(content)}`,
+          undo: { kind: 'deleteNote', id: note.id },
+        },
       );
     }
 
@@ -519,7 +596,13 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
             step_count: recipe.steps.length,
           },
         },
-        { kind: 'recipe_saved', label: `Saved recipe "${recipe.title}"` },
+        {
+          kind: 'recipe_saved',
+          label: `Saved recipe "${recipe.title}"`,
+          area: 'Journal',
+          detail: `Recipe "${recipe.title}"`,
+          undo: { kind: 'deleteNote', id: recipe.id },
+        },
       );
     }
 
@@ -587,7 +670,13 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
       if (!event) return fail('Could not create that event.');
       return ok(
         { created: describeEventResult(event) },
-        { kind: 'event_added', label: `Added "${event.title}" to schedule` },
+        {
+          kind: 'event_added',
+          label: `Added "${event.title}" to schedule`,
+          area: 'Schedule',
+          detail: `Added ${eventWhen(event)}`,
+          undo: { kind: 'deleteEvent', id: event.id },
+        },
       );
     }
 
@@ -598,7 +687,68 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
       deleteEvent(event.id);
       return ok(
         { deleted: { id: event.id, title: event.title } },
-        { kind: 'event_deleted', label: `Removed "${event.title}" from schedule` },
+        {
+          kind: 'event_deleted',
+          label: `Removed "${event.title}" from schedule`,
+          area: 'Schedule',
+          detail: `Removed ${eventWhen(event)}`,
+          undo: { kind: 'restoreEvent', event },
+        },
+      );
+    }
+
+    case 'move_event': {
+      const id = text(input.event_id);
+      const event = getScheduleState().events.find((e) => e.id === id);
+      if (!event) return fail(`No event has id "${String(input.event_id)}". Use an id from CURRENT STATE.`);
+      const newDate = text(input.new_date);
+      if (newDate && !isDayKey(newDate)) return fail(`new_date "${newDate}" is not valid. ${DAY_FORMAT}`);
+      const newStart = text(input.new_start_time);
+      if (newStart && !isTimeKey(newStart)) return fail(`new_start_time "${newStart}" is not valid. ${TIME_FORMAT}`);
+      const newEnd = text(input.new_end_time);
+      if (newEnd && !isTimeKey(newEnd)) return fail(`new_end_time "${newEnd}" is not valid. ${TIME_FORMAT}`);
+      if (!newDate && !newStart && !newEnd) return fail('Give at least one of new_date, new_start_time, new_end_time.');
+
+      // Where it is now: the one-off itself, or the named occurrence of the series.
+      let from: string;
+      let current: ScheduleEvent;
+      let originalDate: string | null = null;
+      if (event.type === 'one-off') {
+        from = event.date!;
+        current = event;
+      } else {
+        const onDay = text(input.occurrence_date);
+        if (!onDay || !isDayKey(onDay)) return fail(`occurrence_date is required for a repeating event. ${DAY_FORMAT}`);
+        const occurrence = occurrencesOn(event, onDay)[0];
+        if (!occurrence) return fail(`"${event.title}" doesn't happen on ${onDay}. Check get_schedule.`);
+        from = onDay;
+        current = occurrence.event;
+        originalDate = occurrence.originalDate;
+      }
+
+      const to = newDate ?? from;
+      const startTime = newStart ?? current.startTime;
+      // A new start alone keeps the event's length.
+      const endTime =
+        newEnd ??
+        (newStart && current.endTime
+          ? timeFromMinutes(minutesOf(newStart) + minutesOf(current.endTime) - minutesOf(current.startTime))
+          : current.endTime);
+      if (endTime && minutesOf(endTime) <= minutesOf(startTime)) return fail('The end time must be after the start time.');
+
+      if (originalDate) setOccurrenceChange(event.id, originalDate, { date: to, startTime, endTime });
+      else retimeEvent(event.id, { from, to, startTime, endTime });
+
+      const moved = { ...current, date: to, startTime, endTime };
+      return ok(
+        { moved: { id: event.id, title: event.title, date: to, time: describeEventTime(moved), only_this_occurrence: !!originalDate } },
+        {
+          kind: 'event_moved',
+          label: `Moved "${event.title}" to ${formatDayKey(to)} ${startTime}`,
+          area: 'Schedule',
+          detail: `Moved ${event.title} → ${formatDayKey(to)} ${describeEventTime(moved)}${originalDate ? ' (this one only)' : ''}`,
+          undo: { kind: 'restoreEvent', event },
+        },
       );
     }
 
@@ -644,10 +794,16 @@ function describeEventResult(event: ScheduleEvent, onDay?: string) {
     title: event.title,
     type: event.type,
     when: onDay ? formatDayKey(onDay) : describeEventDays(event, dayKey()),
+    date: onDay, // the day as "YYYY-MM-DD", for move_event's occurrence_date
     time: describeEventTime(event),
     location: event.location || undefined,
     note: event.note || undefined,
   };
+}
+
+// "Gym, Wed 30 Sep 19:00" or "German A2, Mon + Wed 09:30–11:00".
+function eventWhen(event: ScheduleEvent): string {
+  return `${event.title}, ${describeEventDays(event, dayKey())} ${describeEventTime(event)}`;
 }
 
 function truncateLabel(value: string): string {

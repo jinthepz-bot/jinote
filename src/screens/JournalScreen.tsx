@@ -10,7 +10,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { useRoute, type RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, type NavigationProp, type RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatAmount } from '../coach/format';
@@ -19,11 +19,13 @@ import { useTodayKey } from '../coach/useTodayKey';
 import { useType } from '../design/fonts';
 import { colors, radius, spacing, keyboardAppearance } from '../design/theme';
 import { AddAction, Button, Card, Chip, fieldStyles, screenContentStyle, ScreenTitle, Section, Segmented } from '../design/ui';
+import { useIsDesktop } from '../navigation/layout';
 import type { RootTabParamList } from '../navigation/RootNavigator';
 import { SettingsButton } from '../navigation/SettingsHost';
 import { BuyListCard } from '../goals/BuyListCard';
 import { ChecklistCard } from '../notes/ChecklistCard';
 import { NoteForm } from '../notes/NoteForm';
+import { NotePage } from '../notes/NotePage';
 import { QuickNoteCard } from '../notes/QuickNoteCard';
 import { RecipeCard } from '../notes/RecipeCard';
 import {
@@ -144,13 +146,33 @@ function FilterBar({
   );
 }
 
-function NoteRow({ note, todayKey }: { note: Note; todayKey: string }) {
-  if (note.type === 'quick') return <QuickNoteCard note={note} todayKey={todayKey} />;
-  if (note.type === 'checklist') return <ChecklistCard note={note} />;
-  return <RecipeCard note={note} />;
+function NoteRow({ note, todayKey, onOpen }: { note: Note; todayKey: string; onOpen?: (id: string) => void }) {
+  const open = onOpen ? () => onOpen(note.id) : undefined;
+  if (note.type === 'quick') return <QuickNoteCard note={note} todayKey={todayKey} onOpen={open} />;
+  if (note.type === 'checklist') return <ChecklistCard note={note} onOpen={open} />;
+  return <RecipeCard note={note} onOpen={open} />;
 }
 
+// On desktop a note opens as its own page (see notes/NotePage) in place of the list;
+// which note is open is a route param, so the sidebar's Pinned links can open one
+// from anywhere. On a phone this is just the list, as before.
 export function JournalScreen() {
+  const desktop = useIsDesktop();
+  const params = useRoute<RouteProp<RootTabParamList, 'Journal'>>().params;
+  const navigation = useNavigation<NavigationProp<RootTabParamList, 'Journal'>>();
+  // Lives up here, not in the list, so a half-typed quick note survives opening a
+  // note and coming back (the list unmounts while the page is showing).
+  const draftRef = useRef('');
+
+  const openNote = (noteId: string) => navigation.setParams({ noteId });
+  const backToList = (section?: NoteType) =>
+    navigation.setParams({ noteId: undefined, section, n: Date.now() });
+
+  if (desktop && params?.noteId) return <NotePage noteId={params.noteId} onBack={backToList} />;
+  return <JournalList draft={draftRef} onOpen={desktop ? openNote : undefined} />;
+}
+
+function JournalList({ draft, onOpen }: { draft: { current: string }; onOpen?: (id: string) => void }) {
   const type = useType();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -162,7 +184,6 @@ export function JournalScreen() {
   const [category, setCategory] = useState<RecipeCategory | 'all'>('all');
   const [creating, setCreating] = useState(false);
   const listRef = useRef<FlatList<Note>>(null);
-  const draftRef = useRef('');
 
   // The desktop sidebar's Journal sub-links arrive as route params. To-buy has no
   // filter of its own — the shopping list sits at the top — so it just scrolls there.
@@ -199,7 +220,7 @@ export function JournalScreen() {
           ref={listRef}
           data={visible}
           keyExtractor={(n) => n.id}
-          renderItem={({ item }) => <NoteRow note={item} todayKey={todayKey} />}
+          renderItem={({ item }) => <NoteRow note={item} todayKey={todayKey} onOpen={onOpen} />}
           numColumns={recipeGrid ? columns : 1}
           columnWrapperStyle={recipeGrid ? styles.recipeRow : undefined}
           ItemSeparatorComponent={Separator}
@@ -210,7 +231,7 @@ export function JournalScreen() {
                 title="JOURNAL"
                 action={<SettingsButton />}
               />
-              <Composer draft={draftRef} />
+              <Composer draft={draft} />
               <Section label="Shopping list" aside={buyAside}>
                 <BuyListCard items={coachState.toBuy} onAdd={addBuyItem} onToggle={toggleBought} onDelete={deleteBuyItem} />
               </Section>
