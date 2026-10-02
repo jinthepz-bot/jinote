@@ -10,15 +10,31 @@
 // works offline after that first visit, without a separate build step to populate it.
 const CACHE_NAME = 'jinote-v1';
 
+// index.html no longer registers this on localhost, but a worker installed there
+// before that change would keep serving its cache. When the browser fetches this new
+// version, it clears Jinote's caches, unregisters itself and stops answering requests,
+// so dev always goes to the dev server.
+const IS_LOCALHOST = ['localhost', '127.0.0.1', '[::1]'].includes(self.location.hostname);
+
 self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
+  if (IS_LOCALHOST) {
+    event.waitUntil(
+      caches
+        .keys()
+        .then((keys) => Promise.all(keys.filter((key) => key.startsWith('jinote-')).map((key) => caches.delete(key))))
+        .then(() => self.registration.unregister())
+    );
+    return;
+  }
   event.waitUntil(self.clients.claim());
 });
 
 self.addEventListener('fetch', (event) => {
+  if (IS_LOCALHOST) return;
   const { request } = event;
   if (request.method !== 'GET') return;
   if (new URL(request.url).origin !== self.location.origin) return;

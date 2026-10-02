@@ -23,9 +23,22 @@
     <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon-180.png" />
 
     <!-- Offline after the first visit — see public/sw.js for exactly what it caches
-         and why it's deliberately simple. -->
+         and why it's deliberately simple. Not on localhost: there it would serve an old
+         cached build whenever the dev server is down, so dev removes any worker and
+         cache left over from before instead. (Over plain http on a LAN address the
+         browser never allows a service worker, so localhost is the only dev case.) -->
     <script>
-      if ('serviceWorker' in navigator) {
+      const isLocalhost = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+      if ('serviceWorker' in navigator && isLocalhost) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          registrations.forEach((registration) => registration.unregister());
+        });
+        if ('caches' in window) {
+          caches.keys().then((keys) => {
+            keys.filter((key) => key.startsWith('jinote-')).forEach((key) => caches.delete(key));
+          });
+        }
+      } else if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('./sw.js').catch((error) => {
             console.warn('Service worker registration failed', error);
