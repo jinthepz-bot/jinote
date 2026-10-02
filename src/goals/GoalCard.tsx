@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { formatDayKey } from '../coach/days';
 import { formatAmount } from '../coach/format';
+import { GOAL_TYPE_LABELS } from '../coach/progress';
 import { deadlineStatus, goalProgress } from '../coach/stats';
 import type { Goal } from '../coach/store';
 import { useAccent } from '../design/accent';
@@ -11,6 +12,7 @@ import { Button, Card, IconButton } from '../design/ui';
 
 interface Props {
   goal: Goal;
+  value: number; // what it's measured by now: best single set, today's total or running total (see goalValue)
   todayKey: string;
   onLog: () => void;
   onEditDeadline: () => void;
@@ -29,10 +31,10 @@ function describeDeadline(goal: Goal, todayKey: string, done: boolean): { text: 
   return { text: `${date} · ${status.daysOver} ${status.daysOver === 1 ? 'day' : 'days'} over`, warn: !done };
 }
 
-export function GoalCard({ goal, todayKey, onLog, onEditDeadline, onSetFeatured, onDelete }: Props) {
+export function GoalCard({ goal, value, todayKey, onLog, onEditDeadline, onSetFeatured, onDelete }: Props) {
   const type = useType();
   const accent = useAccent();
-  const { percent, done } = goalProgress(goal);
+  const { percent, done } = goalProgress(goal, value);
   const deadline = describeDeadline(goal, todayKey, done);
   const unit = goal.unit ? ` ${goal.unit}` : '';
 
@@ -44,20 +46,27 @@ export function GoalCard({ goal, todayKey, onLog, onEditDeadline, onSetFeatured,
             {goal.title}
           </Text>
           <Text style={[type.label, done && styles.doneText]}>
-            {goal.type === 'best' ? 'Best result' : 'Cumulative'}
-            {done ? ' · Reached' : ''}
+            {GOAL_TYPE_LABELS[goal.type]}
+            {done ? (goal.type === 'daily' ? ' · Done today' : ' · Reached') : ''}
           </Text>
         </View>
         <View style={styles.numbers}>
           <Text style={[type.number, styles.current]} numberOfLines={1}>
-            {formatAmount(goal.current)}
+            {formatAmount(value)}
           </Text>
           <Text style={type.mono} numberOfLines={1}>
             / {formatAmount(goal.target)}
             {unit}
+            {goal.type === 'daily' ? ' today' : goal.type === 'best' ? ' in one set' : ''}
           </Text>
         </View>
       </View>
+
+      {goal.description ? (
+        <Text style={[type.body, styles.description]} numberOfLines={2}>
+          {goal.description}
+        </Text>
+      ) : null}
 
       <View style={styles.track} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: percent }}>
         <View style={[styles.fill, { width: `${percent}%`, backgroundColor: accent.accent }, done && styles.fillDone]} />
@@ -108,6 +117,7 @@ const styles = StyleSheet.create({
   deadline: { flex: 1 },
   warn: { color: colors.accentStrong },
   doneText: { color: colors.success },
+  description: { fontSize: 14, color: colors.textMuted },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   spacer: { flex: 1 },
 });

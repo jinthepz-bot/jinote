@@ -7,6 +7,11 @@ import type { ActionKind, ActionRecord } from '../types';
 const GLYPHS: Record<ActionKind, string> = {
   progress_logged: '▲',
   goal_created: '★',
+  goal_edited: '✎',
+  goal_deleted: '✕',
+  goal_featured: '★',
+  set_edited: '✎',
+  set_deleted: '✕',
   deadline_set: '◷',
   task_added: '+',
   task_completed: '✓',

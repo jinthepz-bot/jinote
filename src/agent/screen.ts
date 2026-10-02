@@ -1,7 +1,11 @@
 import { addDays, formatDayKey, MONTH_NAMES, MONTHS_SHORT, parseDayKey } from '../coach/days';
 import { goalActivityName } from '../coach/goal';
-import type { Goal } from '../coach/store';
+import type { CoachState, Goal } from '../coach/store';
+import { moodOf } from '../journal/mood';
+import { dayRecap, describeRecap } from '../journal/recap';
+import type { DailyState } from '../journal/store';
 import { noteTitle } from '../notes/format';
+import { parseLine } from '../notes/lines';
 import type { Note } from '../notes/store';
 import { describeEventTime } from '../schedule/format';
 import { eventOccurrencesOnDay } from '../schedule/occurrences';
@@ -16,10 +20,19 @@ export type CoachScreen =
   | { screen: 'schedule'; mode: 'day' | 'week' | 'month'; from: string; to: string }
   | { screen: 'goals' }
   | { screen: 'journal' }
-  | { screen: 'note'; note: Note };
+  | { screen: 'note'; note: Note }
+  | { screen: 'daily'; date: string };
+
+// What describeScreen reads from, fresh at send time.
+export interface ScreenData {
+  events: ScheduleEvent[];
+  coach: CoachState;
+  daily: DailyState;
+}
 
 const MAX_NOTE_CHARS = 2000;
 const MAX_SCHEDULE_ITEMS = 25;
+const MAX_ANSWER_CHARS = 500;
 
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
@@ -42,6 +55,10 @@ export function screenLabel(s: CoachScreen, todayKey: string): string {
       return 'Journal';
     case 'note':
       return clip(noteTitle(s.note) || 'Note', 40);
+    case 'daily': {
+      const p = parseDayKey(s.date)!;
+      return `Daily journal · ${p.day} ${MONTHS_SHORT[p.month - 1]}`;
+    }
     case 'schedule': {
       if (s.mode === 'day') return `Schedule · ${formatDayKey(s.from, todayKey)}`;
       if (s.mode === 'month') {
@@ -65,8 +82,28 @@ function noteBody(note: Note): string {
     .join('\n');
 }
 
+// Quick notes can carry light formatting. Only explained when the note uses it, to
+// keep the request short; to-do lines are what "turn this into tasks" should take.
+function formattingHint(note: Note): string {
+  if (note.type !== 'quick') return '';
+  const lines = note.text.split('\n').map(parseLine);
+  const open = lines.filter((l) => l.kind === 'todo' && !l.done).length;
+  const done = lines.filter((l) => l.kind === 'todo' && l.done).length;
+  const other = lines.some((l) => l.kind === 'heading' || l.kind === 'bullet' || l.kind === 'callout');
+  if (!open && !done && !other) return '';
+  const parts: string[] = [];
+  if (open || done) {
+    parts.push(
+      `Lines starting "[ ] " are open to-dos (${open}) and "[x] " ones are done (${done}): ` +
+        '"turn this into tasks" means one task per open to-do, in its own words, skipping the done ones',
+    );
+  }
+  if (other) parts.push('"# " starts a heading, "- " a bullet, "> " a callout');
+  return ` Formatting: ${parts.join('; ')}.`;
+}
+
 // The ON SCREEN block for the request.
-export function describeScreen(s: CoachScreen, events: ScheduleEvent[], todayKey: string): string {
+export function describeScreen(s: CoachScreen, { events, coach, daily }: ScreenData, todayKey: string): string {
   switch (s.screen) {
     case 'today':
       return 'ON SCREEN: the Today page (featured goal, today\'s to-dos and what\'s done).';
@@ -78,8 +115,22 @@ export function describeScreen(s: CoachScreen, events: ScheduleEvent[], todayKey
       const kind = s.note.type === 'quick' ? 'quick note' : s.note.type;
       return (
         `ON SCREEN: an open Journal ${kind}, "${noteTitle(s.note)}" (id: ${s.note.id}). ` +
-        `"This note" / "this" means it. Its content:\n${clip(noteBody(s.note), MAX_NOTE_CHARS)}`
+        `"This note" / "this" means it.${formattingHint(s.note)} Its content:\n${clip(noteBody(s.note), MAX_NOTE_CHARS)}`
       );
+    }
+    case 'daily': {
+      const entry = daily.entries[s.date];
+      const day = s.date === todayKey ? `today, ${formatDayKey(s.date, todayKey)}` : formatDayKey(s.date, todayKey);
+      const answer = (text: string | undefined) => (text?.trim() ? clip(text.trim(), MAX_ANSWER_CHARS) : '(blank)');
+      return [
+        `ON SCREEN: the Daily journal for ${day} (${s.date}). "Today" / "this day" means it.`,
+        `Mood: ${entry?.mood ? `${moodOf(entry.mood).label} (${entry.mood}/5)` : 'not set'}`,
+        `What went well: ${answer(entry?.wentWell)}`,
+        `What got in the way: ${answer(entry?.gotInTheWay)}`,
+        `Tomorrow's one thing: ${answer(entry?.tomorrowFocus)}`,
+        'What the app recorded that day:',
+        describeRecap(dayRecap(coach, events, s.date)),
+      ].join('\n');
     }
     case 'schedule': {
       const lines: string[] = [];
@@ -102,7 +153,7 @@ export function describeScreen(s: CoachScreen, events: ScheduleEvent[], todayKey
 }
 
 // Two or three one-tap prompts above the input, depending on the screen.
-export function screenSuggestions(s: CoachScreen, featured: Goal): string[] {
+export function screenSuggestions(s: CoachScreen, featured: Goal, todayKey: string): string[] {
   switch (s.screen) {
     case 'today':
       return [`Log 20 ${goalActivityName(featured.title).toLowerCase()}`, 'Plan my evening'];
@@ -114,5 +165,7 @@ export function screenSuggestions(s: CoachScreen, featured: Goal): string[] {
       return ['How am I tracking?', 'What should I focus on today?'];
     case 'journal':
       return ['What have I been noting lately?'];
+    case 'daily':
+      return [s.date === todayKey ? 'Reflect on today' : 'Reflect on this day', 'How was my week?'];
   }
 }

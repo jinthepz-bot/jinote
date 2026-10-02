@@ -1,7 +1,9 @@
 // Local export/import: one JSON file holding everything the app stores, so the
 // user can back up or move devices without an account, a server or a login.
 import { getThemeState, importTheme } from '../design/accent';
+import { isDayKey } from '../coach/days';
 import { getCoachState, importCoachState, type CoachState } from '../coach/store';
+import { getDailyState, importDaily } from '../journal/store';
 import { getNotesState, importNotes } from '../notes/store';
 import { getNotificationPrefs, importNotificationPrefs } from '../notifications/store';
 import { getProfileState, importProfile } from '../profile/store';
@@ -23,6 +25,7 @@ export interface Backup {
     theme: unknown;
     profile: unknown;
     calendar: unknown;
+    daily?: unknown; // absent in backups made before the Daily journal
   };
 }
 
@@ -33,9 +36,10 @@ export interface BackupCounts {
   toBuy: number;
   notes: number;
   events: number;
+  days: number; // Daily journal entries
 }
 
-export function countsOf(coach: CoachState, notes: number, events: number): BackupCounts {
+export function countsOf(coach: CoachState, notes: number, events: number, days: number): BackupCounts {
   return {
     goals: coach.goals.length,
     entries: coach.entries.length,
@@ -43,11 +47,17 @@ export function countsOf(coach: CoachState, notes: number, events: number): Back
     toBuy: coach.toBuy.length,
     notes,
     events,
+    days,
   };
 }
 
 export function currentCounts(): BackupCounts {
-  return countsOf(getCoachState(), getNotesState().notes.length, getScheduleState().events.length);
+  return countsOf(
+    getCoachState(),
+    getNotesState().notes.length,
+    getScheduleState().events.length,
+    Object.keys(getDailyState().entries).length,
+  );
 }
 
 // A recipe photo lives as a file on this device and is referenced by path, so the
@@ -65,6 +75,7 @@ export function buildBackup(): Backup {
       theme: getThemeState(),
       profile: getProfileState(),
       calendar: getCalendarPrefs(),
+      daily: getDailyState(),
     },
   };
 }
@@ -98,6 +109,7 @@ export function parseBackup(text: string): ParseResult {
   const coach = data.coach as CoachState | undefined;
   const notes = (data.notes as { notes?: unknown[] } | undefined)?.notes;
   const events = (data.schedule as { events?: unknown[] } | undefined)?.events;
+  const days = (data.daily as { entries?: unknown } | undefined)?.entries;
 
   const backup: Backup = {
     app: BACKUP_APP,
@@ -111,6 +123,7 @@ export function parseBackup(text: string): ParseResult {
       theme: data.theme,
       profile: data.profile, // absent in backups made before the name existed
       calendar: data.calendar,
+      daily: data.daily,
     },
   };
 
@@ -124,6 +137,7 @@ export function parseBackup(text: string): ParseResult {
       toBuy: Array.isArray(coach?.toBuy) ? coach.toBuy.length : 0,
       notes: Array.isArray(notes) ? notes.length : 0,
       events: Array.isArray(events) ? events.length : 0,
+      days: typeof days === 'object' && days !== null ? Object.keys(days).filter(isDayKey).length : 0,
     },
   };
 }
@@ -138,6 +152,9 @@ export function applyBackup(backup: Backup) {
   importTheme(backup.data.theme);
   importProfile(backup.data.profile);
   importCalendarPrefs(backup.data.calendar);
+  // A backup from before the Daily journal says nothing about it, so the entries
+  // already on this device stay rather than being wiped by an older file.
+  if (backup.data.daily !== undefined) importDaily(backup.data.daily);
 }
 
 export function describeCounts(counts: BackupCounts): string {
@@ -149,5 +166,6 @@ export function describeCounts(counts: BackupCounts): string {
     `${counts.events} ${counts.events === 1 ? 'event' : 'events'}`,
   ];
   if (counts.toBuy > 0) parts.push(`${counts.toBuy} to buy`);
+  if (counts.days > 0) parts.push(`${counts.days} journal ${counts.days === 1 ? 'day' : 'days'}`);
   return parts.join(' · ');
 }

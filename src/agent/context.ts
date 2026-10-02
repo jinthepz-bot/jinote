@@ -1,5 +1,6 @@
 import { addDays, formatDayKey } from '../coach/days';
 import { formatAmount } from '../coach/format';
+import { dayTotal, GOAL_TYPE_LABELS, goalValue, setsOn } from '../coach/progress';
 import { currentStreak, deadlineStatus, goalProgress } from '../coach/stats';
 import { entriesForGoal, getFeaturedGoal, type CoachState, type Goal, type LogEntry } from '../coach/store';
 import { formatTime } from '../coach/days';
@@ -24,30 +25,34 @@ function describeDeadline(goal: Goal, todayKey: string): string {
   return `deadline ${date}, ${status.daysOver} ${status.daysOver === 1 ? 'day' : 'days'} overdue`;
 }
 
-function describeGoal(goal: Goal, todayKey: string): string {
-  const { percent, done } = goalProgress(goal);
+// Says plainly what the goal's number is, so "30" can't be read as a day's total
+// when it's a best single set, or the other way round.
+function describeGoal(goal: Goal, state: CoachState, todayKey: string): string {
+  const value = goalValue(goal, state, todayKey);
+  const { percent, done } = goalProgress(goal, value);
   const unit = goal.unit ? ` ${goal.unit}` : '';
-  const kind = goal.type === 'best' ? 'best result' : 'cumulative';
+  const measure =
+    goal.type === 'best'
+      ? `best single set ${formatAmount(value)} / ${formatAmount(goal.target)}${unit}`
+      : goal.type === 'daily'
+        ? `today's total ${formatAmount(value)} / ${formatAmount(goal.target)}${unit} per day`
+        : `running total ${formatAmount(value)} / ${formatAmount(goal.target)}${unit}`;
+  const description = goal.description ? `; description: "${truncate(goal.description, 120)}"` : '';
   return (
-    `- "${goal.title}" (id: ${goal.id}, ${kind}): ${formatAmount(goal.current)} / ${formatAmount(goal.target)}${unit}` +
-    ` (${percent}%${done ? ', reached' : ''}), ${describeDeadline(goal, todayKey)}`
+    `- "${goal.title}" (id: ${goal.id}, type ${goal.type} = ${GOAL_TYPE_LABELS[goal.type].toLowerCase()}): ${measure}` +
+    ` (${percent}%${done ? ', reached' : ''}), ${describeDeadline(goal, todayKey)}${description}`
   );
 }
 
-// For a best-result goal, each entry is its own set today, so they're listed out —
-// the model needs to see them to know "log 15 more" means a fourth set, not a
-// replacement. A cumulative goal just gets today's running total.
-function describeLoggedToday(goal: Goal, todayEntries: LogEntry[]): string {
-  if (todayEntries.length === 0) return 'Nothing logged today yet.';
+// Today's sets one by one, with their ids — "log 15 more" is a new set, and "that
+// last set was 25, not 20" needs the set's id to fix it.
+function describeLoggedToday(goal: Goal, sets: LogEntry[]): string {
+  if (sets.length === 0) return `  Today: nothing logged yet for "${goal.title}".`;
   const unit = goal.unit ? ` ${goal.unit}` : '';
-  const total = todayEntries.reduce((sum, e) => sum + e.value, 0);
-  if (goal.type !== 'best') {
-    const note = todayEntries[0]?.note;
-    return `Logged today: ${formatAmount(total)}${unit}${note ? ` (note: ${truncate(note, 80)})` : ''}.`;
-  }
-  const sets = todayEntries.map((e) => formatAmount(e.value)).join(', ');
-  return `Logged today: ${todayEntries.length} ${todayEntries.length === 1 ? 'set' : 'sets'} — ${sets}` +
-    ` (total ${formatAmount(total)}${unit}).`;
+  const list = sets
+    .map((e) => `${e.loggedAt > 0 ? `${formatTime(e.loggedAt)} ` : ''}${formatAmount(e.value)} (set id: ${e.id})`)
+    .join(', ');
+  return `  Today: ${sets.length} ${sets.length === 1 ? 'set' : 'sets'} for "${goal.title}" — ${list}; today's total ${formatAmount(dayTotal(sets))}${unit}.`;
 }
 
 function describeTask(task: { id: string; text: string; date: string | null; time: string | null }, todayKey: string): string {
@@ -89,13 +94,10 @@ export function buildCoachContext(state: CoachState, notes: Note[], schedule: Sc
     `CURRENT STATE (today is ${formatDayKey(todayKey, todayKey)}, ${todayKey})`,
     '',
     'FEATURED GOAL (drives the Home screen):',
-    describeGoal(featured, todayKey),
-    `Current streak: ${streak} ${streak === 1 ? 'day' : 'days'}. ` +
-      `Best ${featured.unit || 'result'} ever: ${formatAmount(featured.current)}.`,
+    describeGoal(featured, state, todayKey),
+    describeLoggedToday(featured, setsOn(state, featured.id, todayKey)),
+    `  Streak: ${streak} ${streak === 1 ? 'day' : 'days'} in a row with at least one set.`,
   ];
-
-  const todayEntries = entriesForGoal(state, featured.id).filter((e) => e.date === todayKey);
-  lines.push(describeLoggedToday(featured, todayEntries));
 
   const tomorrowKey = addDays(todayKey, 1);
   const todaySchedule = eventsOnDay(schedule, todayKey);
@@ -106,7 +108,12 @@ export function buildCoachContext(state: CoachState, notes: Note[], schedule: Sc
   lines.push(...(tomorrowSchedule.length > 0 ? tomorrowSchedule.map(describeScheduleEvent) : ['- nothing scheduled']));
 
   lines.push('', `OTHER GOALS (${others.length}):`);
-  lines.push(...(others.length > 0 ? others.map((g) => describeGoal(g, todayKey)) : ['- none']));
+  for (const g of others) {
+    lines.push(describeGoal(g, state, todayKey));
+    const sets = setsOn(state, g.id, todayKey);
+    if (sets.length > 0) lines.push(describeLoggedToday(g, sets));
+  }
+  if (others.length === 0) lines.push('- none');
 
   lines.push('', `OPEN TASKS (${openTasks.length}):`);
   lines.push(

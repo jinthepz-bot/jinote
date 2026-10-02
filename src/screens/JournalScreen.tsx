@@ -23,9 +23,11 @@ import { useIsDesktop } from '../navigation/layout';
 import type { RootTabParamList } from '../navigation/RootNavigator';
 import { SettingsButton } from '../navigation/SettingsHost';
 import { BuyListCard } from '../goals/BuyListCard';
+import { DailyJournalPage } from '../journal/DailyJournalPage';
 import { ChecklistCard } from '../notes/ChecklistCard';
+import { JournalGrid } from '../notes/JournalGrid';
 import { NoteForm } from '../notes/NoteForm';
-import { NotePage } from '../notes/NotePage';
+import { NotePage, type BackTarget } from '../notes/NotePage';
 import { QuickNoteCard } from '../notes/QuickNoteCard';
 import { RecipeCard } from '../notes/RecipeCard';
 import {
@@ -155,7 +157,9 @@ function NoteRow({ note, todayKey, onOpen }: { note: Note; todayKey: string; onO
 
 // On desktop a note opens as its own page (see notes/NotePage) in place of the list;
 // which note is open is a route param, so the sidebar's Pinned links can open one
-// from anywhere. On a phone this is just the list, as before.
+// from anywhere. The Daily journal is a page of its own too, reached from the
+// sidebar, and the Journal home is a card grid (see notes/JournalGrid). On a phone
+// this is just the list, as before.
 export function JournalScreen() {
   const desktop = useIsDesktop();
   const params = useRoute<RouteProp<RootTabParamList, 'Journal'>>().params;
@@ -165,11 +169,28 @@ export function JournalScreen() {
   const draftRef = useRef('');
 
   const openNote = (noteId: string) => navigation.setParams({ noteId });
-  const backToList = (section?: NoteType) =>
-    navigation.setParams({ noteId: undefined, section, n: Date.now() });
+  const backToList = (to?: BackTarget) =>
+    navigation.setParams({ noteId: undefined, section: to?.section, folder: to?.folderId, n: Date.now() });
 
   if (desktop && params?.noteId) return <NotePage noteId={params.noteId} onBack={backToList} />;
-  return <JournalList draft={draftRef} onOpen={desktop ? openNote : undefined} />;
+  if (desktop && params?.section === 'daily') {
+    // No `day` means today, so the page moves on by itself at midnight.
+    return <DailyJournalPage day={params.day} onDayChange={(day) => navigation.setParams({ day })} />;
+  }
+  if (desktop) {
+    return (
+      <JournalGrid
+        section={params?.section}
+        folderId={params?.folder}
+        n={params?.n}
+        onLeaveFolder={() => navigation.setParams({ folder: undefined, section: undefined, n: Date.now() })}
+        onOpen={openNote}
+        onSection={(section) => navigation.setParams({ section })}
+        onDaily={() => navigation.setParams({ section: 'daily', day: undefined, n: Date.now() })}
+      />
+    );
+  }
+  return <JournalList draft={draftRef} />;
 }
 
 function JournalList({ draft, onOpen }: { draft: { current: string }; onOpen?: (id: string) => void }) {
@@ -193,7 +214,7 @@ function JournalList({ draft, onOpen }: { draft: { current: string }; onOpen?: (
     if (!section) return;
     setQuery('');
     setCategory('all');
-    setFilter(section === 'buy' ? 'all' : section);
+    setFilter(section === 'buy' || section === 'daily' ? 'all' : section);
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
   }, [params?.section, params?.n]);
 

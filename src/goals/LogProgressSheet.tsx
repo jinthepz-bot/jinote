@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { formatAmount, parseAmount, sanitizeAmountInput } from '../coach/format';
-import type { Goal } from '../coach/store';
+import { dayTotal, setsOn } from '../coach/progress';
+import { useCoach, type Goal } from '../coach/store';
+import { useTodayKey } from '../coach/useTodayKey';
 import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
 import { Sheet } from '../design/Sheet';
@@ -31,10 +33,16 @@ function LogBody({ goal, onClose, onSave }: { goal: Goal } & Omit<Props, 'goal'>
   const value = parseAmount(amount);
   const unit = goal.unit ? ` ${goal.unit}` : '';
 
+  const { state } = useCoach();
+  const todayKey = useTodayKey();
+  const today = dayTotal(setsOn(state, goal.id, todayKey));
+
   const explanation =
     goal.type === 'best'
-      ? `Best single set so far: ${formatAmount(goal.current)}${unit}. Only a higher set raises it. Each log adds another set for today.`
-      : `Total so far: ${formatAmount(goal.current)}${unit}. What you log is added to it.`;
+      ? `Best single set so far: ${formatAmount(goal.current)}${unit}. Only a higher set raises it. Each log adds another set for today (${formatAmount(today)}${unit} so far).`
+      : goal.type === 'daily'
+        ? `Today so far: ${formatAmount(today)} of ${formatAmount(goal.target)}${unit}. Each log adds to today's total.`
+        : `Total so far: ${formatAmount(goal.current)}${unit}. What you log is added to it.`;
 
   let preview = '';
   if (value !== null) {
@@ -43,7 +51,9 @@ function LogBody({ goal, onClose, onSave }: { goal: Goal } & Omit<Props, 'goal'>
         ? value > goal.current
           ? 'New best!'
           : `Doesn't beat your best of ${formatAmount(goal.current)}`
-        : `New total: ${formatAmount(goal.current + value)}${unit}`;
+        : goal.type === 'daily'
+          ? `Today's total: ${formatAmount(today + value)}${unit}`
+          : `New total: ${formatAmount(goal.current + value)}${unit}`;
   }
 
   const save = () => {

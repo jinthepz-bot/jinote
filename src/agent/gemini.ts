@@ -3,9 +3,12 @@ import type { ActionRecord, AppMessage } from '../types';
 import { describeTask } from './describeTask';
 import { PERSONALITY } from './personality';
 import { COACH_TOOL_SPECS, executeCoachTool, toGeminiFunctionDeclarations } from './tools';
-import { TurnError, type AgentBackend, type TurnOutput } from './types';
+import { TurnError, type AgentBackend, type TurnHooks, type TurnOutput } from './types';
 
 const MAX_TOOL_ROUNDS = 6;
+// Waits before asking the main model again when it's busy; after these, the fallback
+// model gets one try.
+const RETRY_DELAYS_MS = [1000, 3000];
 const MAX_OUTPUT_TOKENS = 4000;
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
@@ -45,11 +48,27 @@ interface GenerateContentResponse {
 
 const TOOLS = [{ functionDeclarations: toGeminiFunctionDeclarations(COACH_TOOL_SPECS) }];
 
-export function createGeminiBackend(options: { apiKey: string; model: string }): AgentBackend {
-  async function call(contents: Content[], context: string, signal: AbortSignal): Promise<GenerateContentResponse> {
+// A failure worth asking again for: the service overloaded (503 "high demand"), a
+// server error, the free tier's rate limit, or the network. Anything else (a bad
+// key, a refusal) would just fail the same way again.
+class BusyError extends Error {}
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(new Error('Stopped'));
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener('abort', () => {
+      clearTimeout(timer);
+      reject(new Error('Stopped'));
+    });
+  });
+}
+
+export function createGeminiBackend(options: { apiKey: string; model: string; fallbackModel: string }): AgentBackend {
+  async function call(model: string, contents: Content[], context: string, signal: AbortSignal): Promise<GenerateContentResponse> {
     let response: Response;
     try {
-      response = await fetch(`${API_BASE}/${options.model}:generateContent`, {
+      response = await fetch(`${API_BASE}/${model}:generateContent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': options.apiKey },
         body: JSON.stringify({
@@ -62,14 +81,16 @@ export function createGeminiBackend(options: { apiKey: string; model: string }):
         }),
         signal,
       });
-    } catch {
-      throw new Error("Couldn't reach the Gemini API. Check your connection and try again.");
+    } catch (err) {
+      if (signal.aborted) throw err;
+      throw new BusyError("Couldn't reach the Gemini API. Check your connection.");
     }
 
     let body: unknown;
     try {
       body = await response.json();
     } catch {
+      if (response.status >= 500) throw new BusyError(`Gemini is busy right now (${response.status}).`);
       throw new Error(`Gemini API error (${response.status}): could not read the response.`);
     }
 
@@ -86,15 +107,50 @@ export function createGeminiBackend(options: { apiKey: string; model: string }):
     return parsed;
   }
 
+  // One request, asked again while the service is busy: the main model up to twice
+  // more (after ~1s, then ~3s), then the lighter fallback model once. Only this one
+  // request is repeated — tools that already ran earlier in the turn stay done.
+  async function callWithRetry(
+    contents: Content[],
+    context: string,
+    signal: AbortSignal,
+    hooks: TurnHooks | undefined,
+  ): Promise<GenerateContentResponse> {
+    const attempts = [
+      ...[0, ...RETRY_DELAYS_MS].map((delay) => ({ model: options.model, delay })),
+      ...(options.fallbackModel && options.fallbackModel !== options.model
+        ? [{ model: options.fallbackModel, delay: 0 }]
+        : []),
+    ];
+    let last: unknown;
+    try {
+      for (const [i, attempt] of attempts.entries()) {
+        if (i > 0) {
+          hooks?.onRetrying?.(true);
+          if (attempt.delay) await sleep(attempt.delay, signal);
+        }
+        try {
+          return await call(attempt.model, contents, context, signal);
+        } catch (err) {
+          if (!(err instanceof BusyError)) throw err;
+          last = err;
+        }
+      }
+    } finally {
+      hooks?.onRetrying?.(false);
+    }
+    throw last;
+  }
+
   return {
-    async respond(history, context, signal): Promise<TurnOutput> {
+    async respond(history, context, signal, hooks): Promise<TurnOutput> {
       const base = toGeminiContents(history);
       const transcript: Content[] = [];
       const actions: ActionRecord[] = [];
 
       try {
         for (let round = 1; ; round++) {
-          const response = await call([...base, ...transcript], context, signal);
+          const response = await callWithRetry([...base, ...transcript], context, signal, hooks);
           const candidate = response.candidates![0];
           const parts = candidate.content?.parts ?? [];
           const callParts = parts.filter((p) => p.functionCall);
@@ -134,7 +190,7 @@ export function createGeminiBackend(options: { apiKey: string; model: string }):
           if (round >= MAX_TOOL_ROUNDS) throw new Error('Stopped after too many tool calls in one reply.');
         }
       } catch (err) {
-        throw new TurnError(err instanceof Error ? err.message : String(err), actions, transcript);
+        throw new TurnError(err instanceof Error ? err.message : String(err), actions, transcript, err instanceof BusyError);
       }
     },
   };
@@ -193,10 +249,10 @@ function friendlyHttpError(status: number, body: unknown): Error {
     return new Error('Your Gemini API key was rejected. Check EXPO_PUBLIC_GEMINI_API_KEY in .env and restart Expo.');
   }
   if (status === 429) {
-    return new Error("Rate limited by the Gemini API's free tier. Wait a moment and try again.");
+    return new BusyError("Gemini's free-tier rate limit was reached.");
   }
   if (status >= 500) {
-    return new Error(`Gemini API error (${status}): the service is temporarily unavailable. Try again shortly.`);
+    return new BusyError(`Gemini is busy right now (${status}).`);
   }
   return new Error(`Gemini API error (${status})${apiMessage ? `: ${apiMessage}` : '.'}`);
 }

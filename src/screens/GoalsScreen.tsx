@@ -3,6 +3,7 @@ import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, View } f
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatDayKey } from '../coach/days';
+import { goalValue } from '../coach/progress';
 import { activityHeatmap } from '../coach/stats';
 import {
   createGoal,
@@ -56,6 +57,7 @@ export function GoalsScreen() {
     <GoalCard
       key={goal.id}
       goal={goal}
+      value={goalValue(goal, state, todayKey)}
       todayKey={todayKey}
       onLog={() => setLogGoalId(goal.id)}
       onEditDeadline={() => setDeadlineGoalId(goal.id)}

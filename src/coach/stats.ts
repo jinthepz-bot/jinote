@@ -50,9 +50,11 @@ export function deadlineStatus(deadline: string | null, todayKey: string): Deadl
   return days >= 0 ? { kind: 'upcoming', daysLeft: days } : { kind: 'passed', daysOver: -days };
 }
 
-export function goalProgress(goal: Goal): { percent: number; done: boolean } {
-  const percent = Math.max(0, Math.min(100, Math.floor((goal.current / goal.target) * 100)));
-  return { percent, done: goal.current >= goal.target };
+// `value` is what the goal is measured by right now (see goalValue in progress.ts);
+// it defaults to the stored number, which is right for record and running-total goals.
+export function goalProgress(goal: Goal, value: number = goal.current): { percent: number; done: boolean } {
+  const percent = Math.max(0, Math.min(100, Math.floor((value / goal.target) * 100)));
+  return { percent, done: value >= goal.target };
 }
 
 // The longest run of consecutive logged days anywhere in the history.

@@ -12,6 +12,7 @@ import { confirmDestructive } from '../design/confirm';
 import { useType } from '../design/fonts';
 import { ACCENTS, colors, radius, sizes, spacing, keyboardAppearance } from '../design/theme';
 import { Button, Card, fieldStyles, screenContentStyle, ScreenTitle, Section, ToggleRow } from '../design/ui';
+import { resetDaily } from '../journal/store';
 import { deleteNotePhoto } from '../notes/photos';
 import { resetNotes } from '../notes/store';
 import { setUserName, useProfile } from '../profile/store';
@@ -295,7 +296,7 @@ function DataSection() {
     confirmDestructive({
       title: 'Reset all data?',
       message:
-        'This permanently deletes your goals and their progress, tasks, to-buy list, notes, and schedule on this device. ' +
+        'This permanently deletes your goals and their progress, tasks, to-buy list, notes, daily journal and schedule on this device. ' +
         "Chat isn't affected. Export first if you might want it back.",
       confirmLabel: 'Reset',
       onConfirm: () => {
@@ -304,6 +305,7 @@ function DataSection() {
           if (note.type === 'recipe') deleteNotePhoto(note.photoUri);
         }
         resetSchedule();
+        resetDaily();
         setStatus({ tone: 'ok', text: 'All data reset.' });
       },
     });

@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextStyle } from 'react-native';
 
 import { useAccent } from '../design/accent';
@@ -7,22 +7,31 @@ import { confirmDestructive } from '../design/confirm';
 import { useType } from '../design/fonts';
 import { hoverDim, hoverFill } from '../design/hover';
 import { colors, keyboardAppearance, radius, sizes, spacing } from '../design/theme';
+import { MenuDivider, MenuRow, Popover, useAnchoredPopover } from '../design/Popover';
 import { Button, Checkbox, IconButton, RowIconButton } from '../design/ui';
+import { COVERS, coverStyle } from './covers';
 import { editedAgo, joinQuickNote, noteTitle, SECTION_LABELS, splitQuickNote } from './format';
+import { LineEditor, type LineEditorHandle } from './LineEditor';
 import { deleteNotePhoto } from './photos';
 import {
   addChecklistItem,
+  addFolder,
   deleteChecklistItem,
   deleteNote,
+  MAX_FOLDER_NAME,
+  setNoteCover,
+  setNoteFolder,
   setPinned,
   toggleChecklistItem,
   updateQuickNote,
   useNotes,
   type ChecklistNote,
+  type Note,
   type NoteType,
   type QuickNote,
   type RecipeNote,
 } from './store';
+import { TagRow } from './TagRow';
 
 const PAGE_WIDTH = 640;
 // Borderless editing: the page is the field, so the browser's focus ring would just
@@ -41,10 +50,15 @@ function useNow(intervalMs = 30_000): number {
   return now;
 }
 
+export interface BackTarget {
+  section?: NoteType; // the grid filtered to that kind of note
+  folderId?: string; // the grid scoped to that folder
+}
+
 interface Props {
   noteId: string;
-  // Back to the Journal list: with a type, filtered to that kind of note.
-  onBack: (section?: NoteType) => void;
+  // Back to the Journal grid, optionally filtered.
+  onBack: (to?: BackTarget) => void;
 }
 
 // One note as a page to read and write in (desktop Journal). The list still lives
@@ -68,6 +82,7 @@ export function NotePage({ noteId, onBack }: Props) {
 
   const title = noteTitle(note);
   const pinned = note.pinnedAt !== null;
+  const folder = note.folderId ? state.folders.find((f) => f.id === note.folderId) : undefined;
 
   const confirmDelete = () =>
     confirmDestructive({
@@ -77,19 +92,26 @@ export function NotePage({ noteId, onBack }: Props) {
       onConfirm: () => {
         if (note.type === 'recipe') deleteNotePhoto(note.photoUri);
         deleteNote(note.id);
-        onBack(note.type);
+        onBack({ section: note.type });
       },
     });
 
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView keyboardShouldPersistTaps="handled">
+        {note.cover ? <View style={[styles.cover, coverStyle(note.cover)]} accessibilityLabel="Cover" /> : null}
+        <View style={styles.scroll}>
         <View style={styles.page}>
           <View style={styles.topRow}>
             <View style={styles.crumbs} role="navigation" accessibilityLabel="Breadcrumb">
               <Crumb label="Journal" onPress={() => onBack()} />
               <Text style={[type.body, styles.crumbSep]}>/</Text>
-              <Crumb label={SECTION_LABELS[note.type]} onPress={() => onBack(note.type)} />
+              {/* Filed in a folder, the folder stands in for the kind of note. */}
+              {folder ? (
+                <Crumb label={folder.name} onPress={() => onBack({ folderId: folder.id })} />
+              ) : (
+                <Crumb label={SECTION_LABELS[note.type]} onPress={() => onBack({ section: note.type })} />
+              )}
               <Text style={[type.body, styles.crumbSep]}>/</Text>
               <Text style={[type.body, styles.crumbCurrent]} numberOfLines={1}>
                 {title}
@@ -98,6 +120,7 @@ export function NotePage({ noteId, onBack }: Props) {
             <Text style={[type.body, styles.edited]} numberOfLines={1}>
               {editedAgo(note.updatedAt, now)}
             </Text>
+            <CoverButton note={note} />
             <Pressable
               onPress={() => setPinned(note.id, !pinned)}
               accessibilityRole="button"
@@ -118,6 +141,7 @@ export function NotePage({ noteId, onBack }: Props) {
           ) : (
             <RecipeBody note={note} />
           )}
+        </View>
         </View>
       </ScrollView>
     </View>
@@ -140,60 +164,88 @@ function Crumb({ label, onPress }: { label: string; onPress: () => void }) {
   );
 }
 
+// Typing is saved once it pauses this long, and straight away on leaving the note.
+const SAVE_DELAY_MS = 400;
+
 // A quick note is written straight into the page: the first line is the title, the
-// rest the body, saved as the one text field the note has always had. Local state
-// holds what's being typed, so a save never moves the cursor.
+// rest the body (edited line by line, with light formatting — see LineEditor), saved
+// as the one text field the note has always had.
 function QuickNoteEditor({ note }: { note: QuickNote }) {
   const type = useType();
-  const initial = splitQuickNote(note.text);
+  const initial = useRef(splitQuickNote(note.text)).current;
   const [title, setTitle] = useState(initial.title);
-  const [body, setBody] = useState(initial.body);
   const [titleHeight, setTitleHeight] = useState(0);
-  const [bodyHeight, setBodyHeight] = useState(0);
-  const bodyRef = useRef<TextInput>(null);
-  // Where to put the caret in the body once a title split has been rendered.
-  const pendingCaret = useRef<number | null>(null);
+  const titleRef = useRef<TextInput>(null);
+  const editorRef = useRef<LineEditorHandle>(null);
+  const latest = useRef({ title: initial.title, body: initial.body });
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    const caret = pendingCaret.current;
-    if (caret === null) return;
-    pendingCaret.current = null;
-    const input = bodyRef.current as (TextInput & {
-      setSelectionRange?: (start: number, end: number) => void; // web: the DOM textarea
-    }) | null;
+  const flush = useCallback(() => {
+    if (!timer.current) return;
+    clearTimeout(timer.current);
+    timer.current = null;
+    updateQuickNote(note.id, joinQuickNote(latest.current.title, latest.current.body));
+  }, [note.id]);
+
+  const schedule = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      updateQuickNote(note.id, joinQuickNote(latest.current.title, latest.current.body));
+    }, SAVE_DELAY_MS);
+  }, [note.id]);
+
+  useEffect(() => () => flush(), [flush]);
+
+  const changeBody = useCallback(
+    (body: string) => {
+      latest.current.body = body;
+      schedule();
+    },
+    [schedule],
+  );
+
+  const focusTitle = useCallback((pos: number) => {
+    const input = titleRef.current as (TextInput & { setSelectionRange?: (s: number, e: number) => void }) | null;
     input?.focus();
-    if (input?.setSelectionRange) input.setSelectionRange(caret, caret);
-    else input?.setSelection(caret, caret);
-  }); // every render: an empty body doesn't change on a split, but focus still has to move
+    if (input?.setSelectionRange) input.setSelectionRange(pos, pos);
+    else input?.setSelection(pos, pos);
+  }, []);
 
-  const save = (nextTitle: string, nextBody: string) => updateQuickNote(note.id, joinQuickNote(nextTitle, nextBody));
+  // Backspace at the start of the body joins its first line onto the title.
+  const mergeIntoTitle = useCallback(
+    (text: string) => {
+      const before = latest.current.title;
+      const next = before + text;
+      latest.current.title = next;
+      setTitle(next);
+      schedule();
+      setTimeout(() => focusTitle(before.length), 0);
+    },
+    [focusTitle, schedule],
+  );
 
   // Return in the title starts a new first line of the body — carrying anything after
   // the cursor down with it — instead of making a two-line title. A pasted block with
-  // line breaks is split the same way. The caret lands where that new line begins.
+  // line breaks is split the same way.
   const changeTitle = (text: string) => {
     const newline = text.indexOf('\n');
-    if (newline === -1) {
-      setTitle(text);
-      save(text, body);
-      return;
-    }
-    const nextTitle = text.slice(0, newline);
-    const carried = text.slice(newline + 1);
-    const nextBody = body ? `${carried}\n${body}` : carried;
+    const nextTitle = newline === -1 ? text : text.slice(0, newline);
+    latest.current.title = nextTitle;
     setTitle(nextTitle);
-    setBody(nextBody);
-    save(nextTitle, nextBody);
-    pendingCaret.current = carried.length;
+    schedule();
+    if (newline !== -1) editorRef.current?.insertFirstLine(text.slice(newline + 1));
   };
 
   return (
     <>
       <TextInput
+        ref={titleRef}
         style={[type.display, styles.title, styles.editable, noOutline, titleHeight ? { height: titleHeight } : null]}
         value={title}
         onChangeText={changeTitle}
         onContentSizeChange={(e) => setTitleHeight(e.nativeEvent.contentSize.height)}
+        onBlur={flush}
         placeholder="Untitled"
         placeholderTextColor={colors.textMuted}
         keyboardAppearance={keyboardAppearance}
@@ -203,22 +255,142 @@ function QuickNoteEditor({ note }: { note: QuickNote }) {
         numberOfLines={1}
         accessibilityLabel="Title"
       />
-      <TextInput
-        ref={bodyRef}
-        style={[type.body, styles.body, styles.editable, noOutline, { height: Math.max(220, bodyHeight) }]}
-        value={body}
-        onChangeText={(text) => {
-          setBody(text);
-          save(title, text);
-        }}
-        onContentSizeChange={(e) => setBodyHeight(e.nativeEvent.contentSize.height)}
-        placeholder="Keep writing…"
-        placeholderTextColor={colors.textMuted}
-        keyboardAppearance={keyboardAppearance}
-        multiline
-        textAlignVertical="top"
-        accessibilityLabel="Note"
+      <NoteMeta note={note} />
+      <LineEditor
+        ref={editorRef}
+        initial={initial.body}
+        onChange={changeBody}
+        onBlurAll={flush}
+        onMergeIntoTitle={mergeIntoTitle}
+        onUpFromTop={() => focusTitle(title.length)}
       />
+    </>
+  );
+}
+
+// Under every note's title: which folder it's in, and its tags.
+function NoteMeta({ note }: { note: Note }) {
+  return (
+    <View style={styles.meta}>
+      <FolderLine note={note} />
+      <TagRow note={note} />
+    </View>
+  );
+}
+
+const FOLDER_MENU_WIDTH = 220;
+
+// "Folder  [Trips ▾]": a dropdown to file the note somewhere else, or nowhere, or in
+// a folder made on the spot.
+function FolderLine({ note }: { note: Note }) {
+  const type = useType();
+  const { state } = useNotes();
+  const menu = useAnchoredPopover('left', FOLDER_MENU_WIDTH);
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState('');
+  const folder = note.folderId ? state.folders.find((f) => f.id === note.folderId) : undefined;
+
+  const close = () => {
+    menu.close();
+    setNaming(false);
+    setName('');
+  };
+  const move = (folderId: string | null) => {
+    setNoteFolder(note.id, folderId);
+    close();
+  };
+  const create = () => {
+    const made = addFolder(name);
+    if (made) setNoteFolder(note.id, made.id);
+    close();
+  };
+
+  return (
+    <View style={styles.folderLine}>
+      <Text style={[type.body, styles.folderLabel]}>Folder</Text>
+      <View ref={menu.ref} collapsable={false}>
+        <Pressable
+          onPress={menu.open}
+          accessibilityRole="button"
+          accessibilityLabel={`Folder: ${folder ? folder.name : 'none'}. Move to another folder`}
+          style={(s) => [styles.folderButton, hoverFill(s)]}
+        >
+          <Ionicons name={folder ? 'folder' : 'folder-outline'} size={14} color={colors.textMuted} />
+          <Text style={[type.body, styles.folderText, !folder && styles.muted]} numberOfLines={1}>
+            {folder ? folder.name : 'None'}
+          </Text>
+          <Ionicons name="chevron-down" size={13} color={colors.textMuted} />
+        </Pressable>
+      </View>
+      <Popover anchor={menu.anchor} width={FOLDER_MENU_WIDTH} onClose={close}>
+        <MenuRow icon="remove-circle-outline" label="No folder" checked={!folder} onPress={() => move(null)} />
+        {state.folders.map((f) => (
+          <MenuRow key={f.id} icon="folder-outline" label={f.name} checked={f.id === note.folderId} onPress={() => move(f.id)} />
+        ))}
+        <MenuDivider />
+        {naming ? (
+          <TextInput
+            style={[type.body, styles.newFolderInput, noOutline]}
+            value={name}
+            onChangeText={setName}
+            autoFocus
+            maxLength={MAX_FOLDER_NAME}
+            placeholder="Folder name"
+            placeholderTextColor={colors.textMuted}
+            keyboardAppearance={keyboardAppearance}
+            onSubmitEditing={create}
+            onKeyPress={(e) => {
+              if (e.nativeEvent.key === 'Escape') setNaming(false);
+            }}
+            accessibilityLabel="New folder name"
+          />
+        ) : (
+          <MenuRow icon="add" label="New folder…" onPress={() => setNaming(true)} />
+        )}
+      </Popover>
+    </View>
+  );
+}
+
+const COVER_MENU_WIDTH = 200;
+
+// The top bar's "Cover" button: five soft strips, or none.
+function CoverButton({ note }: { note: Note }) {
+  const type = useType();
+  const menu = useAnchoredPopover('right', COVER_MENU_WIDTH);
+  const pick = (cover: Note['cover']) => {
+    setNoteCover(note.id, cover);
+    menu.close();
+  };
+  return (
+    <>
+      <View ref={menu.ref} collapsable={false}>
+        <Pressable
+          onPress={menu.open}
+          accessibilityRole="button"
+          accessibilityLabel={note.cover ? 'Change cover' : 'Add a cover'}
+          style={(s) => [styles.pin, hoverFill(s)]}
+        >
+          <Ionicons name="color-palette-outline" size={15} color={colors.text} />
+          <Text style={[type.bodyStrong, styles.pinText]}>Cover</Text>
+        </Pressable>
+      </View>
+      <Popover anchor={menu.anchor} width={COVER_MENU_WIDTH} onClose={menu.close}>
+        <View style={styles.swatches}>
+          {COVERS.map((c) => (
+            <Pressable
+              key={c.id}
+              onPress={() => pick(c.id)}
+              accessibilityRole="button"
+              accessibilityLabel={`${c.label} cover`}
+              accessibilityState={{ selected: note.cover === c.id }}
+              style={(s) => [styles.swatch, coverStyle(c.id), note.cover === c.id && styles.swatchOn, hoverDim(s)]}
+            />
+          ))}
+        </View>
+        <MenuDivider />
+        <MenuRow icon="close-circle-outline" label="No cover" checked={note.cover === null} onPress={() => pick(null)} />
+      </Popover>
     </>
   );
 }
@@ -241,6 +413,7 @@ function ChecklistBody({ note }: { note: ChecklistNote }) {
       <Text style={[type.display, styles.title]} accessibilityRole="header" selectable>
         {note.title}
       </Text>
+      <NoteMeta note={note} />
       <Text style={[type.body, styles.muted]}>
         {note.items.length === 0 ? 'No items yet' : `${done} of ${note.items.length} done`}
       </Text>
@@ -304,6 +477,7 @@ function RecipeBody({ note }: { note: RecipeNote }) {
       <Text style={[type.display, styles.title]} accessibilityRole="header" selectable>
         {note.title}
       </Text>
+      <NoteMeta note={note} />
       <View style={styles.recipeMeta}>
         <Text style={[type.body, styles.muted]}>{meta}</Text>
         <Text style={styles.stars} accessibilityLabel={`${note.rating} out of 3 stars`}>
@@ -380,6 +554,36 @@ const styles = StyleSheet.create({
   pinText: { fontSize: 13 },
 
   title: { fontSize: 40, lineHeight: 48 },
+  cover: { height: 132, width: '100%' },
+  meta: { gap: spacing.sm, zIndex: 10, marginBottom: spacing.sm },
+  folderLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  folderLabel: { fontSize: 13, color: colors.textMuted, width: 48 },
+  folderButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 28,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: colors.border,
+    maxWidth: 260,
+  },
+  folderText: { fontSize: 13, flexShrink: 1 },
+  newFolderInput: {
+    marginHorizontal: spacing.sm,
+    height: sizes.controlSm,
+    paddingHorizontal: spacing.sm,
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.control,
+    backgroundColor: colors.background,
+    color: colors.text,
+  },
+  swatches: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  swatch: { width: 28, height: 28, borderRadius: 6, borderWidth: 2, borderColor: 'transparent' },
+  swatchOn: { borderColor: colors.text },
   body: { fontSize: 17, lineHeight: 28, color: colors.text },
   editable: { padding: 0, borderWidth: 0, backgroundColor: 'transparent', color: colors.text },
 

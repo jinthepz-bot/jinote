@@ -5,13 +5,19 @@ import { isTimeKey } from '../schedule/time';
 import { isDayKey } from './days';
 import { roundAmount } from './format';
 
-export type GoalType = 'best' | 'cumulative';
+// "best": a record — the most done in ONE set (push-ups in one unbroken set).
+// "daily": a daily total — everything logged today, against a target per day.
+// "cumulative": a running total across all time (money saved). Older goals only; new
+// ones are "best" or "daily".
+export type GoalType = 'best' | 'daily' | 'cumulative';
 
 export interface Goal {
   id: string;
   title: string;
-  target: number;
-  // "best": highest single result so far (never goes down). "cumulative": running total.
+  description: string; // what the goal means, in the user's words ("in one unbroken set")
+  target: number; // "daily": per day
+  // "best": the best single set so far. "cumulative": the running total. Unused for
+  // "daily", whose number is today's total (see coach/progress.ts).
   current: number;
   type: GoalType;
   deadline: string | null; // local day, "YYYY-MM-DD"
@@ -61,7 +67,12 @@ export interface NewGoalInput {
   target: number;
   type: GoalType;
   deadline: string | null;
+  description?: string;
+  unit?: string;
 }
+
+// The featured goal's wording from before goals had descriptions (it lived in goal.ts).
+export const PUSHUPS_DESCRIPTION = '100 push-ups in one unbroken set before the deadline. Show up every day.';
 
 export const FEATURED_GOAL_ID = 'goal_pushups';
 
@@ -72,6 +83,7 @@ function featuredGoal(overrides: Partial<Goal> = {}): Goal {
   return {
     id: FEATURED_GOAL_ID,
     title: '100 push-ups',
+    description: PUSHUPS_DESCRIPTION,
     target: 100,
     current: 0,
     type: 'best',
@@ -101,12 +113,18 @@ function normalize(raw: unknown): CoachState {
   for (const g of records(obj.goals)) {
     if (typeof g.id !== 'string' || goals.some((x) => x.id === g.id)) continue;
     if (typeof g.title !== 'string' || !isNum(g.target) || g.target <= 0) continue;
+    // Goals saved before descriptions existed. The original push-ups goal becomes a
+    // record goal ("best single set") with its old wording as the description; its
+    // logged sets all stay as they are.
+    const legacy = typeof g.description !== 'string';
+    const pushups = legacy && g.id === FEATURED_GOAL_ID;
     goals.push({
       id: g.id,
       title: g.title,
+      description: legacy ? (pushups ? PUSHUPS_DESCRIPTION : '') : (g.description as string),
       target: g.target,
       current: isNum(g.current) && g.current > 0 ? g.current : 0,
-      type: g.type === 'cumulative' ? 'cumulative' : 'best',
+      type: pushups ? 'best' : g.type === 'cumulative' || g.type === 'daily' ? g.type : 'best',
       deadline: isDayKey(g.deadline) ? g.deadline : null,
       unit: str(g.unit),
       featured: g.id === FEATURED_GOAL_ID,
@@ -227,55 +245,125 @@ export function entriesForGoal(state: CoachState, goalId: string): LogEntry[] {
 
 // --- goals
 
-// Best-result goals: each log adds a new set for that day (never overwrites an earlier
-// one) and raises `current` — the best single set ever — only if this one is higher.
-// Cumulative goals: adds a new entry and adds the value to the running total.
+const sortEntries = (entries: LogEntry[]) =>
+  entries.sort((a, b) => a.date.localeCompare(b.date) || a.loggedAt - b.loggedAt);
+
+// A goal's stored number after its sets changed. A record ("best") never drops below
+// `floor` (what it was before, which may predate the sets on file) unless `floor`
+// itself came from a set that's now gone or smaller — then the best remaining set.
+function recomputeCurrent(goal: Goal, entries: LogEntry[], floor: number): number {
+  const values = entries.filter((e) => e.goalId === goal.id).map((e) => e.value);
+  if (goal.type === 'best') return Math.max(floor, ...values, 0);
+  if (goal.type === 'cumulative') return roundAmount(values.reduce((sum, v) => sum + v, 0));
+  return goal.current;
+}
+
+export interface LogResult {
+  entryIds: string[];
+  isNewBest: boolean;
+  previousCurrent: number;
+  current: number;
+}
+
+// Logs one or more sets at once ("20, then 10, then 20" is three sets), each its own
+// entry a millisecond apart so they keep their order. A record only rises if one of
+// these sets beats it; a running total adds them all; a daily goal just gains sets.
+export function logSets(goalId: string, values: number[], note: string, date: string): LogResult | null {
+  const state = store.get();
+  const goal = state.goals.find((g) => g.id === goalId);
+  if (!goal || values.length === 0 || !values.every((v) => isNum(v) && v > 0) || !isDayKey(date)) return null;
+
+  const now = Date.now();
+  const added: LogEntry[] = values.map((v, i) => ({
+    id: newId('entry'),
+    goalId,
+    date,
+    value: roundAmount(v),
+    note: i === 0 ? note.trim() : '',
+    loggedAt: now + i,
+  }));
+  const entries = sortEntries([...state.entries, ...added]);
+
+  let current = goal.current;
+  if (goal.type === 'best') current = Math.max(goal.current, ...added.map((e) => e.value));
+  else if (goal.type === 'cumulative') current = roundAmount(goal.current + added.reduce((sum, e) => sum + e.value, 0));
+
+  store.set({ ...state, entries, goals: state.goals.map((g) => (g.id === goalId ? { ...g, current } : g)) });
+  return {
+    entryIds: added.map((e) => e.id),
+    isNewBest: goal.type === 'best' && current > goal.current,
+    previousCurrent: goal.current,
+    current,
+  };
+}
+
 export function logProgress(
   goalId: string,
   value: number,
   note: string,
   date: string,
 ): { isNewBest: boolean; current: number; entryId: string } | null {
-  const state = store.get();
-  const goal = state.goals.find((g) => g.id === goalId);
-  if (!goal || !isNum(value) || value <= 0 || !isDayKey(date)) return null;
-
-  const amount = roundAmount(value);
-  const entry: LogEntry = { id: newId('entry'), goalId, date, value: amount, note: note.trim(), loggedAt: Date.now() };
-  const entries = [...state.entries, entry].sort(
-    (a, b) => a.date.localeCompare(b.date) || a.loggedAt - b.loggedAt,
-  );
-
-  let current: number;
-  let isNewBest = false;
-  if (goal.type === 'best') {
-    isNewBest = amount > goal.current;
-    current = Math.max(goal.current, amount);
-  } else {
-    current = roundAmount(goal.current + amount);
-  }
-
-  store.set({ ...state, entries, goals: state.goals.map((g) => (g.id === goalId ? { ...g, current } : g)) });
-  return { isNewBest, current, entryId: entry.id };
+  const result = logSets(goalId, [value], note, date);
+  return result && { isNewBest: result.isNewBest, current: result.current, entryId: result.entryIds[0] };
 }
 
-// Undo for a logged set: removes the entry and puts the goal's number back. A best
-// result returns to what it was before, or to a set logged since if that's higher; a
-// running total just loses this amount.
-export function undoLog(entryId: string, previousCurrent: number) {
+// Undo for logged sets: removes them and puts the goal's number back (see
+// recomputeCurrent). `previousCurrent` is what it was before they were logged.
+export function removeEntries(entryIds: string[], previousCurrent: number) {
   store.update((s) => {
-    const entry = s.entries.find((e) => e.id === entryId);
-    if (!entry) return s;
-    const entries = s.entries.filter((e) => e.id !== entryId);
-    const goals = s.goals.map((g) => {
-      if (g.id !== entry.goalId) return g;
-      const current =
-        g.type === 'best'
-          ? Math.max(previousCurrent, ...entries.filter((e) => e.goalId === g.id && e.loggedAt > entry.loggedAt).map((e) => e.value))
-          : roundAmount(Math.max(0, g.current - entry.value));
-      return { ...g, current };
-    });
+    const gone = s.entries.filter((e) => entryIds.includes(e.id));
+    if (gone.length === 0) return s;
+    const entries = s.entries.filter((e) => !entryIds.includes(e.id));
+    const goalIds = new Set(gone.map((e) => e.goalId));
+    const goals = s.goals.map((g) => (goalIds.has(g.id) ? { ...g, current: recomputeCurrent(g, entries, g.type === 'best' ? previousCurrent : 0) } : g));
     return { ...s, entries, goals };
+  });
+}
+
+// Kept for receipts saved before several sets could be logged at once.
+export function undoLog(entryId: string, previousCurrent: number) {
+  removeEntries([entryId], previousCurrent);
+}
+
+// The record's floor once `entryId` changes: if that set held the record, the record
+// is recomputed from the sets; otherwise it stays.
+function floorWithout(goal: Goal, entry: LogEntry): number {
+  return goal.type === 'best' && entry.value >= goal.current ? 0 : goal.current;
+}
+
+// Changes one logged set's size. Returns the set as it was and the goal's number
+// before, for Undo.
+export function updateEntry(entryId: string, value: number): { before: LogEntry; previousCurrent: number } | null {
+  const state = store.get();
+  const entry = state.entries.find((e) => e.id === entryId);
+  const goal = entry && state.goals.find((g) => g.id === entry.goalId);
+  if (!entry || !goal || !isNum(value) || value <= 0) return null;
+  const entries = state.entries.map((e) => (e.id === entryId ? { ...e, value: roundAmount(value) } : e));
+  const current = recomputeCurrent(goal, entries, floorWithout(goal, entry));
+  store.set({ ...state, entries, goals: state.goals.map((g) => (g.id === goal.id ? { ...g, current } : g)) });
+  return { before: entry, previousCurrent: goal.current };
+}
+
+export function deleteEntry(entryId: string): { before: LogEntry; previousCurrent: number } | null {
+  const state = store.get();
+  const entry = state.entries.find((e) => e.id === entryId);
+  const goal = entry && state.goals.find((g) => g.id === entry.goalId);
+  if (!entry || !goal) return null;
+  const entries = state.entries.filter((e) => e.id !== entryId);
+  const current = recomputeCurrent(goal, entries, floorWithout(goal, entry));
+  store.set({ ...state, entries, goals: state.goals.map((g) => (g.id === goal.id ? { ...g, current } : g)) });
+  return { before: entry, previousCurrent: goal.current };
+}
+
+// Undo for an edited or deleted set: the set goes back exactly as it was, and the
+// goal's number with it (or higher, if a bigger set has been logged since).
+export function restoreEntry(entry: LogEntry, previousCurrent: number) {
+  store.update((s) => {
+    const goal = s.goals.find((g) => g.id === entry.goalId);
+    if (!goal) return s;
+    const entries = sortEntries([...s.entries.filter((e) => e.id !== entry.id), entry]);
+    const current = recomputeCurrent(goal, entries, goal.type === 'best' ? previousCurrent : 0);
+    return { ...s, entries, goals: s.goals.map((g) => (g.id === goal.id ? { ...g, current } : g)) };
   });
 }
 
@@ -285,11 +373,12 @@ export function createGoal(input: NewGoalInput): Goal | null {
   const goal: Goal = {
     id: newId('goal'),
     title,
+    description: input.description?.trim() ?? '',
     target: roundAmount(input.target),
     current: 0,
     type: input.type,
     deadline: isDayKey(input.deadline) ? input.deadline : null,
-    unit: '',
+    unit: input.unit?.trim() ?? '',
     featured: false,
     createdAt: Date.now(),
   };
@@ -304,16 +393,63 @@ export function setGoalDeadline(goalId: string, deadline: string | null) {
   }));
 }
 
-// Deletes a goal and its progress history. The featured goal can't be deleted.
-export function deleteGoal(goalId: string) {
+export interface GoalEdit {
+  title?: string;
+  description?: string;
+  type?: GoalType;
+  target?: number;
+  deadline?: string | null;
+  unit?: string;
+}
+
+// Changes a goal's details. Switching type re-reads its number from the sets on file:
+// a record becomes the best single set, a running total the sum. Returns the goal as
+// it was, for Undo.
+export function editGoal(goalId: string, edit: GoalEdit): Goal | null {
+  const state = store.get();
+  const goal = state.goals.find((g) => g.id === goalId);
+  if (!goal) return null;
+  const next: Goal = {
+    ...goal,
+    title: edit.title?.trim() || goal.title,
+    description: edit.description !== undefined ? edit.description.trim() : goal.description,
+    type: edit.type ?? goal.type,
+    target: edit.target !== undefined && isNum(edit.target) && edit.target > 0 ? roundAmount(edit.target) : goal.target,
+    deadline: edit.deadline === undefined ? goal.deadline : isDayKey(edit.deadline) ? edit.deadline : null,
+    unit: edit.unit !== undefined ? edit.unit.trim() : goal.unit,
+  };
+  if (next.type !== goal.type) next.current = recomputeCurrent(next, state.entries, 0);
+  store.set({ ...state, goals: state.goals.map((g) => (g.id === goalId ? next : g)) });
+  return goal;
+}
+
+// Undo for an edit: the goal exactly as it was.
+export function restoreGoalDetails(goal: Goal) {
+  store.update((s) => ({ ...s, goals: s.goals.map((g) => (g.id === goal.id ? { ...goal, featured: g.featured } : g)) }));
+}
+
+// Deletes a goal and its progress history, returning both (and where it sat) for
+// Undo. The featured goal can't be deleted.
+export function deleteGoal(goalId: string): { goal: Goal; entries: LogEntry[]; index: number } | null {
+  const state = store.get();
+  const index = state.goals.findIndex((g) => g.id === goalId);
+  const goal = state.goals[index];
+  if (!goal || goal.featured) return null;
+  const entries = state.entries.filter((e) => e.goalId === goalId);
+  store.set({
+    ...state,
+    goals: state.goals.filter((g) => g.id !== goalId),
+    entries: state.entries.filter((e) => e.goalId !== goalId),
+  });
+  return { goal, entries, index };
+}
+
+export function restoreGoal(goal: Goal, entries: LogEntry[], index: number) {
   store.update((s) => {
-    const goal = s.goals.find((g) => g.id === goalId);
-    if (!goal || goal.featured) return s;
-    return {
-      ...s,
-      goals: s.goals.filter((g) => g.id !== goalId),
-      entries: s.entries.filter((e) => e.goalId !== goalId),
-    };
+    if (s.goals.some((g) => g.id === goal.id)) return s;
+    const goals = [...s.goals];
+    goals.splice(Math.min(Math.max(index, 1), goals.length), 0, { ...goal, featured: false });
+    return { ...s, goals, entries: sortEntries([...s.entries, ...entries]) };
   });
 }
 

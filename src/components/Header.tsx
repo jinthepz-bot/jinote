@@ -30,7 +30,7 @@ export function Header({ activity, mock, canClear, onClear, action, compact, see
           <View style={styles.dot} />
         )}
         <Text style={[type.label, styles.statusText, busy && { color: accent.accent }]} numberOfLines={1}>
-          {busy ? 'Thinking...' : 'Your coach'}
+          {activity.kind === 'thinking' && activity.retrying ? 'Busy, retrying...' : busy ? 'Thinking...' : 'Your coach'}
         </Text>
         {mock ? (
           <Text

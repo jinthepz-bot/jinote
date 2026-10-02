@@ -13,14 +13,15 @@ import type { CalendarKind } from '../schedule/calendar/items';
 import { kindColors } from '../schedule/calendar/kindColors';
 import { goToDay, toggleFilter, useCalendarView, type CalendarFilters } from '../schedule/calendar/viewStore';
 import { MiniMonth } from './MiniMonth';
+import { SidebarFolders } from './SidebarFolders';
 import { SIDEBAR_WIDTH } from './layout';
 import { useSettings } from './SettingsHost';
 
-export type JournalSection = 'quick' | 'checklist' | 'recipe' | 'buy';
+export type JournalSection = 'daily' | 'quick' | 'checklist' | 'recipe' | 'buy';
 
 export type SidebarTarget =
   | { screen: 'Home' | 'Schedule' | 'Goals' }
-  | { screen: 'Journal'; section?: JournalSection; noteId?: string };
+  | { screen: 'Journal'; section?: JournalSection; noteId?: string; folder?: string };
 
 const NAV: { label: string; icon: IconName; target: SidebarTarget }[] = [
   { label: 'Today', icon: 'sunny-outline', target: { screen: 'Home' } },
@@ -30,6 +31,7 @@ const NAV: { label: string; icon: IconName; target: SidebarTarget }[] = [
 ];
 
 const JOURNAL_LINKS: { label: string; section: JournalSection }[] = [
+  { label: 'Daily journal', section: 'daily' },
   { label: 'Quick notes', section: 'quick' },
   { label: 'Checklists', section: 'checklist' },
   { label: 'Recipes', section: 'recipe' },
@@ -45,11 +47,12 @@ const NOTE_ICONS: Record<NoteType, IconName> = {
 interface Props {
   route: string; // the active tab's name
   journalSection: JournalSection | undefined;
+  journalFolder: string | undefined; // the folder the Journal grid is showing, if any
   openNoteId: string | undefined; // the note open as a page on Journal, if any
   onNavigate: (target: SidebarTarget) => void;
 }
 
-export function Sidebar({ route, journalSection, openNoteId, onNavigate }: Props) {
+export function Sidebar({ route, journalSection, journalFolder, openNoteId, onNavigate }: Props) {
   const type = useType();
   const accent = useAccent();
   const { open: openSettings } = useSettings();
@@ -60,7 +63,14 @@ export function Sidebar({ route, journalSection, openNoteId, onNavigate }: Props
   // With a note open, the sub-link for its kind stays lit, so the sidebar agrees with
   // the page's breadcrumb ("Journal / Quick notes / ...").
   const openNote = inJournal && openNoteId ? notesState.notes.find((n) => n.id === openNoteId) : undefined;
-  const activeSection: JournalSection | undefined = openNote ? openNote.type : journalSection;
+  // Browsing a folder lights the folder, not a kind of note (a chip may still filter
+  // within it). An open note lights its folder if it's filed, else its kind.
+  const activeFolder = !inJournal ? undefined : openNote ? (openNote.folderId ?? undefined) : journalFolder;
+  const activeSection: JournalSection | undefined = activeFolder
+    ? undefined
+    : openNote
+      ? openNote.type
+      : journalSection;
 
   return (
     <View style={styles.root}>
@@ -85,7 +95,7 @@ export function Sidebar({ route, journalSection, openNoteId, onNavigate }: Props
                 <NavLink
                   label={item.label}
                   icon={item.icon}
-                  active={active && !(inJournal && activeSection)}
+                  active={active && !(inJournal && (activeSection || activeFolder))}
                   activeColor={accent.accent}
                   onPress={() => onNavigate(item.target)}
                 />
@@ -101,6 +111,11 @@ export function Sidebar({ route, journalSection, openNoteId, onNavigate }: Props
                         onPress={() => onNavigate({ screen: 'Journal', section: link.section })}
                       />
                     ))}
+                    <SidebarFolders
+                      activeFolderId={activeFolder}
+                      activeColor={accent.accent}
+                      onOpen={(folder) => onNavigate({ screen: 'Journal', folder })}
+                    />
                   </View>
                 )}
               </View>

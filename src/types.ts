@@ -1,3 +1,4 @@
+import type { Goal, LogEntry } from './coach/store';
 import type { ScheduleEvent } from './schedule/store';
 
 // One backend's raw wire messages for a turn (tool calls and results included),
@@ -16,6 +17,11 @@ export type TaskStatus = 'running' | 'reporting' | 'done' | 'error' | 'stopped';
 export type ActionKind =
   | 'progress_logged'
   | 'goal_created'
+  | 'goal_edited'
+  | 'goal_deleted'
+  | 'goal_featured'
+  | 'set_edited'
+  | 'set_deleted'
   | 'deadline_set'
   | 'task_added'
   | 'task_completed'
@@ -39,7 +45,12 @@ export type UndoRecord =
   | { kind: 'unbuy'; id: string }
   | { kind: 'deleteNote'; id: string }
   | { kind: 'removeLog'; entryId: string; previousCurrent: number }
+  | { kind: 'removeLogs'; entryIds: string[]; previousCurrent: number }
+  | { kind: 'restoreSet'; entry: LogEntry; previousCurrent: number }
   | { kind: 'deleteGoal'; id: string }
+  | { kind: 'restoreGoal'; goal: Goal; entries: LogEntry[]; index: number }
+  | { kind: 'restoreGoalDetails'; goal: Goal }
+  | { kind: 'setFeatured'; goalId: string }
   | { kind: 'setDeadline'; goalId: string; deadline: string | null };
 
 // A change the assistant made to the user's data, shown in the chat.
@@ -66,6 +77,9 @@ export interface TextMessage {
   role: 'user' | 'assistant';
   text: string;
   isError?: boolean;
+  // An error from a busy or unreachable service, after retrying: shown as "Coach
+  // couldn't reply" with a Try again button (while it's the latest message).
+  canRetry?: boolean;
   actions?: ActionRecord[];
   transcript?: ApiMessage[];
   createdAt: number;
@@ -90,7 +104,8 @@ export interface TaskMessage {
 export type AppMessage = TextMessage | TaskMessage;
 
 // What the assistant is doing right now, shown in the header.
-export type Activity = { kind: 'idle' } | { kind: 'thinking' };
+// `retrying`: the service was busy and the request is being asked again.
+export type Activity = { kind: 'idle' } | { kind: 'thinking'; retrying?: boolean };
 
 export function makeId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;

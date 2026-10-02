@@ -7,10 +7,20 @@ import { colors, radius, sizes, spacing, keyboardAppearance } from '../design/th
 import { useAccent } from '../design/accent';
 import { Button, Chip, fieldStyles, Segmented } from '../design/ui';
 import { pickPhotoFromCamera, pickPhotoFromLibrary, photosSupported } from './photos';
-import { addChecklist, addQuickNote, addRecipe, RECIPE_CATEGORIES, type NoteType, type RecipeCategory } from './store';
+import {
+  addChecklist,
+  addQuickNote,
+  addRecipe,
+  RECIPE_CATEGORIES,
+  setNoteFolder,
+  type NoteType,
+  type RecipeCategory,
+} from './store';
 
 interface Props {
   visible: boolean;
+  initialType?: NoteType; // which kind the form opens on (the desktop "+ New" menu picks one)
+  folderId?: string; // file the new note here (made from inside a folder on desktop)
   onCancel: () => void;
   onSaved: () => void;
 }
@@ -24,10 +34,10 @@ const TYPES: { value: NoteType; label: string; hint: string }[] = [
 // "One per line" text areas are split into arrays; blank lines are dropped.
 const splitLines = (text: string): string[] => text.split('\n').map((l) => l.trim()).filter(Boolean);
 
-export function NoteForm({ visible, onCancel, onSaved }: Props) {
+export function NoteForm({ visible, initialType, folderId, onCancel, onSaved }: Props) {
   return (
     <Sheet visible={visible} onClose={onCancel}>
-      <FormBody onCancel={onCancel} onSaved={onSaved} />
+      <FormBody initialType={initialType} folderId={folderId} onCancel={onCancel} onSaved={onSaved} />
     </Sheet>
   );
 }
@@ -85,10 +95,10 @@ function PhotoField({ uri, onChange }: { uri: string | null; onChange: (uri: str
   );
 }
 
-function FormBody({ onCancel, onSaved }: Omit<Props, 'visible'>) {
+function FormBody({ initialType, folderId, onCancel, onSaved }: Omit<Props, 'visible'>) {
   const type = useType();
   const accent = useAccent();
-  const [noteType, setNoteType] = useState<NoteType>('quick');
+  const [noteType, setNoteType] = useState<NoteType>(initialType ?? 'quick');
 
   // Quick
   const [text, setText] = useState('');
@@ -116,10 +126,11 @@ function FormBody({ onCancel, onSaved }: Omit<Props, 'visible'>) {
 
   const save = () => {
     if (!canSave) return;
-    if (noteType === 'quick') addQuickNote(text);
-    else if (noteType === 'checklist') addChecklist(checklistTitle, splitLines(items));
+    let made: { id: string } | null;
+    if (noteType === 'quick') made = addQuickNote(text);
+    else if (noteType === 'checklist') made = addChecklist(checklistTitle, splitLines(items));
     else {
-      addRecipe({
+      made = addRecipe({
         title: recipeTitle,
         photoUri,
         cookTime,
@@ -130,6 +141,7 @@ function FormBody({ onCancel, onSaved }: Omit<Props, 'visible'>) {
         notes: recipeNotes,
       });
     }
+    if (made && folderId) setNoteFolder(made.id, folderId);
     onSaved();
   };
 

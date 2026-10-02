@@ -19,8 +19,8 @@ interface Props {
 }
 
 const TYPES: { value: GoalType; label: string; hint: string }[] = [
-  { value: 'cumulative', label: 'Cumulative', hint: 'Everything you log adds up, like money saved or books read.' },
-  { value: 'best', label: 'Best result', hint: 'Your highest single result counts, like push-ups in one set.' },
+  { value: 'best', label: 'Best single set', hint: 'A record: the most in one go counts, like push-ups in one unbroken set.' },
+  { value: 'daily', label: 'Daily total', hint: 'A daily target: everything you log today adds up, and it starts again tomorrow.' },
 ];
 
 export function GoalForm({ visible, onCancel, ...rest }: Props) {
@@ -46,7 +46,8 @@ function FormBody({ todayKey, onCancel, onCreate }: Omit<Props, 'visible'>) {
   const accent = useAccent();
   const [title, setTitle] = useState('');
   const [target, setTarget] = useState('');
-  const [goalType, setGoalType] = useState<GoalType>('cumulative');
+  const [goalType, setGoalType] = useState<GoalType>('best');
+  const [description, setDescription] = useState('');
   const [deadline, setDeadline] = useState<string | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
 
@@ -54,7 +55,7 @@ function FormBody({ todayKey, onCancel, onCreate }: Omit<Props, 'visible'>) {
   const canCreate = title.trim() !== '' && targetValue !== null;
 
   const create = () => {
-    if (canCreate) onCreate({ title: title.trim(), target: targetValue, type: goalType, deadline });
+    if (canCreate) onCreate({ title: title.trim(), target: targetValue, type: goalType, deadline, description });
   };
 
   return (
@@ -74,7 +75,19 @@ function FormBody({ todayKey, onCancel, onCreate }: Omit<Props, 'visible'>) {
         />
       </Field>
 
-      <Field label="Target">
+      <Field label="Description (optional)">
+        <TextInput
+          style={[fieldStyles.input, fieldStyles.single, type.body]}
+          value={description}
+          onChangeText={setDescription}
+          placeholder="e.g. 100 push-ups in one unbroken set"
+          placeholderTextColor={colors.textMuted}
+          keyboardAppearance={keyboardAppearance}
+          accessibilityLabel="Goal description"
+        />
+      </Field>
+
+      <Field label={goalType === 'daily' ? 'Target per day' : 'Target'}>
         <TextInput
           style={[fieldStyles.input, fieldStyles.single, type.number, styles.target]}
           value={target}

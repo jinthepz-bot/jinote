@@ -43,6 +43,7 @@ import { useSchedule } from '../schedule/store';
 import { TaskForm } from './TaskForm';
 import type { CalendarKind } from '../schedule/calendar/items';
 import { kindColors } from '../schedule/calendar/kindColors';
+import { GoalTodayCard } from './GoalTodayCard';
 import { doneToday, todoForToday } from './todayItems';
 import { WeekBars } from './WeekBars';
 
@@ -119,11 +120,6 @@ export function DesktopHome() {
 
   const featured = getFeaturedGoal(state);
   const entries = entriesForGoal(state, featured.id);
-  const todayEntries = entries.filter((e) => e.date === todayKey);
-  const total = todayEntries.reduce((sum, e) => sum + e.value, 0);
-  const left = Math.max(0, featured.target - total);
-  const percent = Math.min(100, Math.round((total / featured.target) * 100));
-  const unit = featured.unit ? ` ${featured.unit}` : '';
   const streak = currentStreak(entries, todayKey);
   const week = last7Days(entries, todayKey);
 
@@ -167,32 +163,9 @@ export function DesktopHome() {
           </View>
 
           <View style={[row, styles.topRow]}>
-            <Card style={[styles.goalCard, sideBySide && styles.wide]}>
-              <Text style={[type.bodyStrong, styles.goalName]}>{featured.title}</Text>
-              <Text style={[type.body, styles.muted]}>
-                Daily target · {featured.target}
-                {unit}
-              </Text>
-              <View style={styles.bigRow}>
-                <Text style={[type.number, styles.bigNumber]}>{total}</Text>
-                <Text style={[type.body, styles.muted]}>
-                  of {featured.target}
-                  {unit}
-                </Text>
-              </View>
-              <View
-                style={styles.track}
-                accessibilityRole="progressbar"
-                accessibilityValue={{ min: 0, max: featured.target, now: total }}
-              >
-                <View style={[styles.fill, { width: `${percent}%`, backgroundColor: accent.accent }]} />
-              </View>
-              <View style={styles.stats}>
-                <Stat label="Sets today" value={todayEntries.length} />
-                <Stat label="Best set" value={featured.current} />
-                <Stat label="Left" value={left} />
-              </View>
-            </Card>
+            <View style={sideBySide ? styles.wide : undefined}>
+              <GoalTodayCard goal={featured} state={state} todayKey={todayKey} stacked={contentWidth < 560} />
+            </View>
 
             <View style={[styles.streakCard, sideBySide && styles.narrow]}>
               <Text style={[type.body, { color: rgba(onDark, 0.7) }]}>Streak</Text>
@@ -323,16 +296,6 @@ export function DesktopHome() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
-  const type = useType();
-  return (
-    <View style={styles.stat}>
-      <Text style={[type.body, styles.muted, styles.statLabel]}>{label}</Text>
-      <Text style={[type.number, styles.statValue]}>{value}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
@@ -356,7 +319,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
   },
-  pressed: { opacity: 0.8 },
   muted: { color: colors.textMuted },
 
   row: { flexDirection: 'row', gap: spacing.lg, alignItems: 'stretch' },
@@ -366,22 +328,8 @@ const styles = StyleSheet.create({
   narrow: { flex: 1, minWidth: 0 },
   equal: { flex: 1, minWidth: 0 },
 
-  goalCard: { gap: spacing.xs, padding: spacing.xl },
-  goalName: { fontSize: 17 },
   bigRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginTop: spacing.sm },
   bigNumber: { fontSize: 64, lineHeight: 72 },
-  track: {
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.surface2,
-    overflow: 'hidden',
-    marginTop: spacing.sm,
-  },
-  fill: { height: '100%', borderRadius: 5 },
-  stats: { flexDirection: 'row', gap: spacing.xl, marginTop: spacing.lg },
-  stat: { gap: 2 },
-  statLabel: { fontSize: 13 },
-  statValue: { fontSize: 24, lineHeight: 30 },
 
   streakCard: {
     backgroundColor: colors.darkCard,

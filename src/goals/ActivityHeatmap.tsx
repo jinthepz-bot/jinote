@@ -114,7 +114,7 @@ export function ActivityHeatmap({ heatmap, todayKey, unit }: Props) {
           </>
         ) : (
           <Text style={[type.mono, styles.muted]} numberOfLines={1}>
-            {max > 0 ? `Tap a day · best ${max} ${unit}` : 'Nothing logged in the last 3 months'}
+            {max > 0 ? `Tap a day · best day ${max} ${unit} in total` : 'Nothing logged in the last 3 months'}
           </Text>
         )}
       </View>

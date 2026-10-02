@@ -79,14 +79,14 @@ export function ChatScreen({
   onCollapse?: () => void;
   screen?: CoachScreen;
 }) {
-  const { messages, activity, loaded, send: sendRaw, stop, clear, undo } = useAgentChat();
+  const { messages, activity, loaded, send: sendRaw, retry, stop, clear, undo } = useAgentChat();
   const todayKey = useTodayKey();
   const coach = useCoach();
   // Read at send time, so a message goes with the screen the user is on right then.
   const screenRef = useRef(screen);
   screenRef.current = screen;
   const send = (text: string) => sendRaw(text, screenRef.current);
-  const suggestions = embedded && screen && coach.loaded ? screenSuggestions(screen, getFeaturedGoal(coach.state)) : [];
+  const suggestions = embedded && screen && coach.loaded ? screenSuggestions(screen, getFeaturedGoal(coach.state), todayKey) : [];
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<AppMessage>>(null);
 
@@ -102,7 +102,7 @@ export function ChatScreen({
       clearTimeout(soon);
       clearTimeout(settled);
     };
-  }, [messages.length, activity.kind]);
+  }, [messages.length, activity]);
 
   const confirmClear = () =>
     confirmDestructive({
@@ -128,18 +128,29 @@ export function ChatScreen({
         <FlatList
           ref={listRef}
           data={messages}
+          // Try again shows only while idle, so rows re-render when that changes.
+          extraData={activity}
           keyExtractor={(m) => m.id}
           renderItem={({ item }) =>
             item.kind === 'task' ? (
               <TaskCard task={item} />
             ) : (
-              <MessageBubble message={item} receipts={embedded} onUndo={(i) => undo(item.id, i)} />
+              <MessageBubble
+                message={item}
+                receipts={embedded}
+                onUndo={(i) => undo(item.id, i)}
+                onRetry={
+                  item.canRetry && activity.kind === 'idle' && item.id === messages[messages.length - 1]?.id
+                    ? () => retry(item.id, screenRef.current)
+                    : undefined
+                }
+              />
             )
           }
           contentContainerStyle={styles.list}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
           ListEmptyComponent={loaded ? <EmptyState onPick={send} /> : null}
-          ListFooterComponent={activity.kind === 'thinking' ? <ThinkingBubble /> : null}
+          ListFooterComponent={activity.kind === 'thinking' ? <ThinkingBubble retrying={activity.retrying} /> : null}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
         />

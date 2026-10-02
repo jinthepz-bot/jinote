@@ -3,7 +3,6 @@ import { KeyboardAvoidingView, ScrollView, StyleSheet, Text, View } from 'react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatDayKey } from '../coach/days';
-import { goal as homeGoal } from '../coach/goal';
 import { currentStreak, deadlineStatus, last7Days, longestStreak } from '../coach/stats';
 import {
   addTask,
@@ -25,7 +24,7 @@ import { DesktopHome } from '../home/DesktopHome';
 import { useIsDesktop } from '../navigation/layout';
 import { SettingsButton } from '../navigation/SettingsHost';
 import { DeadlinePicker } from '../home/DeadlinePicker';
-import { GoalProgress } from '../home/GoalProgress';
+import { GoalTodayCard } from '../home/GoalTodayCard';
 import { QuickLog } from '../home/QuickLog';
 import { StatTile } from '../home/StatTile';
 import { TaskForm } from '../home/TaskForm';
@@ -104,7 +103,7 @@ function PhoneHome() {
             >
               JINOTE
             </Text>
-            <Text style={[type.body, styles.mission]}>{homeGoal.mission}</Text>
+            {featured.description ? <Text style={[type.body, styles.mission]}>{featured.description}</Text> : null}
           </View>
 
           <Section label="Today">
@@ -113,7 +112,6 @@ function PhoneHome() {
 
           <Section label="Scoreboard">
             <View style={styles.tiles}>
-              <StatTile label="Best set" value={featured.current} unit={featured.unit} />
               <StatTile label="Day streak" value={streak} unit={streak === 1 ? 'day' : 'days'} />
               <StatTile
                 label="Best run"
@@ -130,11 +128,8 @@ function PhoneHome() {
             </View>
           </Section>
 
-          <Section
-            label="Main goal"
-            aside={featured.deadline ? `Deadline ${formatDayKey(featured.deadline, todayKey)}` : undefined}
-          >
-            <GoalProgress current={featured.current} target={featured.target} />
+          <Section label="Main goal">
+            <GoalTodayCard goal={featured} state={state} todayKey={todayKey} stacked />
           </Section>
 
           <Section label="Last 7 days" aside={`${activeDays}/7 active`}>

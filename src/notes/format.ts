@@ -27,6 +27,20 @@ export function noteTitle(note: Note): string {
 
 const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`;
 
+// The grid cards' shorter form: "Edited just now", "Edited 5m ago", "Edited 2h ago",
+// "Edited yesterday", "Edited 3d ago", then the date.
+export function editedShort(timestamp: number, now: number = Date.now()): string {
+  const minutes = Math.max(0, Math.round((now - timestamp) / 60_000));
+  if (minutes < 1) return 'Edited just now';
+  if (minutes < 60) return `Edited ${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `Edited ${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days === 1) return 'Edited yesterday';
+  if (days < 7) return `Edited ${days}d ago`;
+  return `Edited ${formatDayKey(dayKey(new Date(timestamp)), dayKey(new Date(now)))}`;
+}
+
 // "Edited just now", "Edited 5 minutes ago", "Edited yesterday", "Edited Mon 21 Sep".
 export function editedAgo(timestamp: number, now: number = Date.now()): string {
   const seconds = Math.max(0, Math.round((now - timestamp) / 1000));

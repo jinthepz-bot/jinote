@@ -38,8 +38,9 @@ export type RootTabParamList = {
   Home: undefined;
   Goals: undefined;
   // `n` changes on every sidebar click so choosing the same section twice still applies it.
-  // `noteId` opens that note as a page (desktop only).
-  Journal: { section?: JournalSection; noteId?: string; n?: number } | undefined;
+  // `noteId` opens that note as a page (desktop only). `day` is the Daily journal's
+  // date when it isn't today. `folder` scopes the card grid to one folder's notes.
+  Journal: { section?: JournalSection; noteId?: string; day?: string; folder?: string; n?: number } | undefined;
   Schedule: undefined;
   Chat: undefined;
 };
@@ -135,6 +136,8 @@ export function RootNavigator() {
   const [route, setRoute] = useState<string>('Home');
   const [journalSection, setJournalSection] = useState<JournalSection | undefined>();
   const [openNoteId, setOpenNoteId] = useState<string | undefined>();
+  const [journalDay, setJournalDay] = useState<string | undefined>();
+  const [journalFolder, setJournalFolder] = useState<string | undefined>();
 
   const syncRoute = () => {
     const current = navRef.getCurrentRoute();
@@ -142,11 +145,19 @@ export function RootNavigator() {
     setRoute(current?.name ?? 'Home');
     setJournalSection(params?.section);
     setOpenNoteId(params?.noteId);
+    setJournalDay(params?.day);
+    setJournalFolder(params?.folder);
   };
 
   const navigate = (target: SidebarTarget) => {
     if (target.screen === 'Journal') {
-      navRef.navigate('Journal', { section: target.section, noteId: target.noteId, n: Date.now() });
+      navRef.navigate('Journal', {
+        section: target.section,
+        noteId: target.noteId,
+        folder: target.folder,
+        day: undefined,
+        n: Date.now(),
+      });
     } else navRef.navigate(target.screen);
   };
 
@@ -183,7 +194,13 @@ export function RootNavigator() {
         {desktop ? (
           <RightSheetHost>
             <View style={styles.desktop}>
-              <Sidebar route={route} journalSection={journalSection} openNoteId={openNoteId} onNavigate={navigate} />
+              <Sidebar
+                route={route}
+                journalSection={journalSection}
+                journalFolder={journalFolder}
+                openNoteId={openNoteId}
+                onNavigate={navigate}
+              />
               <View style={styles.main}>{tabs}</View>
               {coachCollapsed ? (
                 <View style={styles.coachStrip}>
@@ -202,7 +219,9 @@ export function RootNavigator() {
                       useAgentChat's store, so reopening it shows the same conversation. */}
                   <CoachPanel
                     route={route}
+                    journalSection={journalSection}
                     openNoteId={openNoteId}
+                    journalDay={journalDay}
                     onCollapse={() => setCoachPanelCollapsed(true)}
                   />
                 </View>

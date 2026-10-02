@@ -1,4 +1,18 @@
-import { deleteBuyItem, deleteGoal, deleteTask, getCoachState, setGoalDeadline, toggleBought, toggleTask, undoLog } from '../coach/store';
+import {
+  deleteBuyItem,
+  deleteGoal,
+  deleteTask,
+  getCoachState,
+  removeEntries,
+  restoreEntry,
+  restoreGoal,
+  restoreGoalDetails,
+  setFeaturedGoal,
+  setGoalDeadline,
+  toggleBought,
+  toggleTask,
+  undoLog,
+} from '../coach/store';
 import { deleteNote } from '../notes/store';
 import { deleteEvent, restoreEvent } from '../schedule/store';
 import type { UndoRecord } from '../types';
@@ -37,8 +51,23 @@ export function runUndo(undo: UndoRecord): boolean {
     case 'removeLog':
       undoLog(undo.entryId, undo.previousCurrent);
       return true;
+    case 'removeLogs':
+      removeEntries(undo.entryIds, undo.previousCurrent);
+      return true;
+    case 'restoreSet':
+      restoreEntry(undo.entry, undo.previousCurrent);
+      return true;
     case 'deleteGoal':
-      deleteGoal(undo.id);
+      return deleteGoal(undo.id) !== null;
+    case 'restoreGoal':
+      restoreGoal(undo.goal, undo.entries, undo.index);
+      return true;
+    case 'restoreGoalDetails':
+      restoreGoalDetails(undo.goal);
+      return true;
+    case 'setFeatured':
+      if (!getCoachState().goals.some((g) => g.id === undo.goalId)) return false;
+      setFeaturedGoal(undo.goalId);
       return true;
     case 'setDeadline':
       setGoalDeadline(undo.goalId, undo.deadline);

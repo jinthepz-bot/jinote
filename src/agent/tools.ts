@@ -1,19 +1,28 @@
 import type Anthropic from '@anthropic-ai/sdk';
 
-import { addDays, dayKey, formatDayKey, formatTime, isDayKey } from '../coach/days';
+import { addDays, dayKey, daysBetween, formatDayKey, formatTime, isDayKey } from '../coach/days';
 import { formatAmount, roundAmount } from '../coach/format';
 import { goalProgress } from '../coach/stats';
+import { dayTotal, GOAL_TYPE_LABELS, goalValue, setsOn } from '../coach/progress';
 import {
   addBuyItem,
   addTask,
   createGoal,
+  deleteEntry,
+  deleteGoal,
+  editGoal,
   getCoachState,
-  logProgress,
-  setGoalDeadline,
+  getFeaturedGoal,
+  logSets,
+  setFeaturedGoal,
   toggleBought,
   toggleTask,
+  updateEntry,
   type Goal,
+  type GoalEdit,
 } from '../coach/store';
+import { moodOf } from '../journal/mood';
+import { dailyEntriesBetween, getDailyState } from '../journal/store';
 import { addChecklist, addQuickNote, addRecipe, getNotesState, searchNotes, type Note } from '../notes/store';
 import { describeEventDays, describeEventTime } from '../schedule/format';
 import { eventsOnDay } from '../schedule/occurrences';
@@ -34,6 +43,8 @@ const DAY_FORMAT = 'Local date "YYYY-MM-DD".';
 const TIME_FORMAT = '24-hour "HH:MM", e.g. "10:15".';
 const MAX_NOTE_RESULTS = 20;
 const MAX_SCHEDULE_RESULTS = 20;
+const MAX_JOURNAL_DAYS = 31;
+const MAX_JOURNAL_ANSWER_CHARS = 300;
 
 // A single line might be a natural comma-separated list ("flour, eggs, milk"),
 // which is common for ingredients and checklist items but not for steps (whose
@@ -95,44 +106,84 @@ export const COACH_TOOL_SPECS: ToolSpec[] = [
   {
     name: 'log_progress',
     description:
-      "Log progress toward a goal. Use it when the user says they did something countable (\"did 24 push-ups\", " +
-      '"log 15 more", "saved 50 today"). For a best-result goal, each call adds a new set for today rather than ' +
-      "replacing one — pass just this set's size (CURRENT STATE shows today's sets already logged, if any), and " +
-      "the goal's overall record only rises if this single set beats it. For a cumulative goal the value is added " +
-      'to the running total, same as before.',
+      'Log sets the user says they did ("did 24 push-ups", "20, then 10, then 20" = three sets). Each number is ' +
+      'one set, logged as its own entry for today — never add numbers up yourself or log a total as one set. ' +
+      "One set counts toward both the goal's record (best single set, which only rises if a set beats it) and " +
+      "today's total. If it isn't clear whether a number is one set, a total, or a target (\"add push up to 30\"), " +
+      'ask instead of calling this.',
     properties: {
       goal_id: { type: 'string', description: 'Exact goal id from CURRENT STATE.' },
-      value: { type: 'number', description: "This set's (or this addition's) size, as a positive number — not a running total." },
+      sets: {
+        type: 'string',
+        description: 'The set sizes in the order done, comma-separated: "24" for one set, "20, 10, 20" for three.',
+      },
       note: { type: 'string', description: "Optional short note in the user's words." },
     },
-    required: ['goal_id', 'value'],
+    required: ['goal_id', 'sets'],
+  },
+  {
+    name: 'edit_set',
+    description: "Change the size of one set logged today (\"that last set was 25, not 20\"). Set ids are in CURRENT STATE.",
+    properties: {
+      set_id: { type: 'string', description: 'Exact set id from CURRENT STATE.' },
+      value: { type: 'number', description: 'The correct size of that one set.' },
+    },
+    required: ['set_id', 'value'],
+  },
+  {
+    name: 'delete_set',
+    description: 'Delete one logged set (logged by mistake). Set ids are in CURRENT STATE.',
+    properties: { set_id: { type: 'string', description: 'Exact set id from CURRENT STATE.' } },
+    required: ['set_id'],
   },
   {
     name: 'create_goal',
     description:
-      'Create a new goal. Only when the user asks for one. Ask first if the target number or the type is unclear.',
+      'Create a new goal. Only when the user asks for one. Ask first if the target or the type is unclear.',
     properties: {
-      title: { type: 'string', description: 'Short goal title.' },
-      target: { type: 'number', description: 'Target number to reach.' },
+      title: { type: 'string', description: 'Short goal title, e.g. "100 push-ups".' },
       type: {
         type: 'string',
-        enum: ['best', 'cumulative'],
+        enum: ['best', 'daily'],
         description:
-          '"best" when the highest single result counts (push-ups in one set); ' +
-          '"cumulative" when logged values add up (money saved, books read).',
+          '"best" = best single set: a record, the most done in one go (100 push-ups in one unbroken set). ' +
+          '"daily" = daily total: everything logged in a day adds up toward a target per day.',
       },
+      target: { type: 'number', description: 'The record to reach ("best") or the amount per day ("daily").' },
+      unit: { type: 'string', description: 'Optional unit, e.g. "reps", "km", "pages".' },
       deadline: { type: 'string', description: `Optional deadline. ${DAY_FORMAT}` },
+      description: { type: 'string', description: "Optional one-line description in the user's words." },
     },
-    required: ['title', 'target', 'type'],
+    required: ['title', 'type', 'target'],
   },
   {
-    name: 'set_deadline',
-    description: "Set, change, or clear a goal's deadline.",
+    name: 'edit_goal',
+    description:
+      "Change a goal's name, type, target, unit, deadline or description. Pass only what changes. Logged sets are kept.",
     properties: {
       goal_id: { type: 'string', description: 'Exact goal id from CURRENT STATE.' },
-      date: { type: 'string', nullable: true, description: `The deadline. ${DAY_FORMAT} Use null to remove it.` },
+      title: { type: 'string', description: 'New title.' },
+      type: { type: 'string', enum: ['best', 'daily'], description: '"best" (best single set) or "daily" (daily total).' },
+      target: { type: 'number', description: 'New target.' },
+      unit: { type: 'string', description: 'New unit.' },
+      deadline: { type: 'string', nullable: true, description: `New deadline. ${DAY_FORMAT} Use null to remove it.` },
+      description: { type: 'string', description: 'New description.' },
     },
-    required: ['goal_id', 'date'],
+    required: ['goal_id'],
+  },
+  {
+    name: 'delete_goal',
+    description:
+      'Delete a goal and its logged sets. Only when the user clearly asks. The featured goal can\'t be deleted: ' +
+      'feature another goal first.',
+    properties: { goal_id: { type: 'string', description: 'Exact goal id from CURRENT STATE.' } },
+    required: ['goal_id'],
+  },
+  {
+    name: 'set_featured_goal',
+    description: 'Make a goal the featured one, shown on the Today screen.',
+    properties: { goal_id: { type: 'string', description: 'Exact goal id from CURRENT STATE.' } },
+    required: ['goal_id'],
   },
   {
     name: 'add_task',
@@ -292,6 +343,18 @@ export const COACH_TOOL_SPECS: ToolSpec[] = [
     },
     required: ['range'],
   },
+  {
+    name: 'get_journal',
+    description:
+      "Read the user's Daily journal for a range of days: each day's mood (1 Rough to 5 Great) and their answers to " +
+      '"What went well?", "What got in the way?" and "Tomorrow\'s one thing". Use it for questions like "How was my ' +
+      `week?" or to spot patterns. At most ${MAX_JOURNAL_DAYS} days. Changes nothing.`,
+    properties: {
+      from: { type: 'string', description: `First day. ${DAY_FORMAT}` },
+      to: { type: 'string', description: `Last day, inclusive. ${DAY_FORMAT}` },
+    },
+    required: ['from', 'to'],
+  },
 ];
 
 export function toAnthropicTools(specs: ToolSpec[]): Anthropic.Beta.BetaTool[] {
@@ -366,18 +429,43 @@ function findGoal(id: unknown): Goal | ToolRun {
   return goal ?? fail(`No goal has id "${String(id)}". Use an id from CURRENT STATE.`);
 }
 
+// What the goal looks like now, with its numbers named for what they are — the
+// coach quotes these rather than working anything out itself.
 function describeGoalResult(goal: Goal) {
-  const { percent, done } = goalProgress(goal);
+  const state = getCoachState();
+  const today = dayKey();
+  const sets = setsOn(state, goal.id, today);
+  const value = goalValue(goal, state, today);
+  const { percent, done } = goalProgress(goal, value);
   return {
     id: goal.id,
     title: goal.title,
-    current: goal.current,
+    type: GOAL_TYPE_LABELS[goal.type].toLowerCase(),
     target: goal.target,
+    unit: goal.unit,
+    ...(goal.type === 'best' ? { best_single_set: goal.current } : {}),
+    ...(goal.type === 'cumulative' ? { running_total: goal.current } : {}),
+    today_total: dayTotal(sets),
+    today_sets: sets.map((e) => e.value),
     percent,
     reached: done,
     deadline: goal.deadline,
+    featured: goal.featured,
   };
 }
+
+// "20, 10, 20", "20 10 20" or a plain number -> [20, 10, 20]; null if any part isn't
+// a positive number.
+function parseSets(raw: unknown): number[] | null {
+  if (typeof raw === 'number') return positiveNumber(raw) === null ? null : [roundAmount(raw)];
+  if (typeof raw !== 'string') return null;
+  const parts = raw.split(/[,;\s+]+/).filter(Boolean);
+  if (parts.length === 0 || parts.length > 20) return null;
+  const values = parts.map((p) => Number(p));
+  return values.every((v) => Number.isFinite(v) && v > 0) ? values.map(roundAmount) : null;
+}
+
+const goalType = (v: unknown): 'best' | 'daily' | null => (v === 'best' || v === 'daily' ? v : null);
 
 // Runs one tool call from the coach against the local stores, regardless of which
 // provider produced it. Input is checked here, so bad input comes back to the model
@@ -389,20 +477,62 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
     case 'log_progress': {
       const goal = findGoal(input.goal_id);
       if ('content' in goal) return goal;
-      const value = positiveNumber(input.value);
-      if (value === null) return fail('value must be a positive number.');
-      const result = logProgress(goal.id, value, text(input.note) ?? '', dayKey());
-      if (!result) return fail('Could not log that progress.');
+      const values = parseSets(input.sets ?? input.value);
+      if (!values) return fail('sets must be one or more positive numbers, comma-separated, e.g. "20, 10, 20".');
+      const result = logSets(goal.id, values, text(input.note) ?? '', dayKey());
+      if (!result) return fail('Could not log those sets.');
       const updated = getCoachState().goals.find((g) => g.id === goal.id)!;
+      const now = describeGoalResult(updated);
       const unit = goal.unit ? ` ${goal.unit}` : '';
+      const list = values.map(formatAmount).join(', ');
+      const what = values.length === 1 ? `${list}${unit}` : `${values.length} sets (${list})`;
+      const record = result.isNewBest ? ` · new record ${formatAmount(result.current)}` : '';
       return ok(
-        { logged: value, ...describeGoalResult(updated), is_new_best: result.isNewBest },
+        { logged_sets: values, is_new_record: result.isNewBest, goal: now },
         {
           kind: 'progress_logged',
-          label: `Logged ${formatAmount(value)}${unit} to "${goal.title}"${result.isNewBest ? ' · new best' : ''}`,
+          label: `Logged ${what} to "${goal.title}"${record}`,
           area: 'Goal',
-          detail: `Logged ${formatAmount(value)}${unit} · ${goal.title}${result.isNewBest ? ' · new best' : ''}`,
-          undo: { kind: 'removeLog', entryId: result.entryId, previousCurrent: goal.current },
+          detail: `Logged ${what} · ${goal.title} · today ${formatAmount(now.today_total)}${record}`,
+          undo: { kind: 'removeLogs', entryIds: result.entryIds, previousCurrent: result.previousCurrent },
+        },
+      );
+    }
+
+    case 'edit_set':
+    case 'delete_set': {
+      const entry = typeof input.set_id === 'string' ? getCoachState().entries.find((e) => e.id === input.set_id) : undefined;
+      if (!entry) return fail(`No logged set has id "${String(input.set_id)}". Use a set id from CURRENT STATE.`);
+      const goal = getCoachState().goals.find((g) => g.id === entry.goalId)!;
+      const when = entry.loggedAt > 0 ? ` at ${formatTime(entry.loggedAt)}` : '';
+      if (name === 'edit_set') {
+        const value = positiveNumber(input.value);
+        if (value === null) return fail('value must be a positive number.');
+        const done = updateEntry(entry.id, value);
+        if (!done) return fail('Could not change that set.');
+        const now = describeGoalResult(getCoachState().goals.find((g) => g.id === goal.id)!);
+        return ok(
+          { changed_set: { id: entry.id, from: entry.value, to: value }, goal: now },
+          {
+            kind: 'set_edited',
+            label: `Changed a set of "${goal.title}" from ${formatAmount(entry.value)} to ${formatAmount(value)}`,
+            area: 'Goal',
+            detail: `Set${when} ${formatAmount(entry.value)} → ${formatAmount(value)} · ${goal.title} · today ${formatAmount(now.today_total)}`,
+            undo: { kind: 'restoreSet', entry: done.before, previousCurrent: done.previousCurrent },
+          },
+        );
+      }
+      const done = deleteEntry(entry.id);
+      if (!done) return fail('Could not delete that set.');
+      const now = describeGoalResult(getCoachState().goals.find((g) => g.id === goal.id)!);
+      return ok(
+        { deleted_set: { id: entry.id, value: entry.value, date: entry.date }, goal: now },
+        {
+          kind: 'set_deleted',
+          label: `Deleted a set of ${formatAmount(entry.value)} from "${goal.title}"`,
+          area: 'Goal',
+          detail: `Deleted set${when} of ${formatAmount(entry.value)} · ${goal.title} · today ${formatAmount(now.today_total)}`,
+          undo: { kind: 'restoreSet', entry: done.before, previousCurrent: done.previousCurrent },
         },
       );
     }
@@ -410,13 +540,20 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
     case 'create_goal': {
       const title = text(input.title);
       const target = positiveNumber(input.target);
-      const type = input.type === 'best' || input.type === 'cumulative' ? input.type : null;
+      const type = goalType(input.type);
       if (!title) return fail('title is required.');
       if (target === null) return fail('target must be a positive number.');
-      if (!type) return fail('type must be "best" or "cumulative".');
+      if (!type) return fail('type must be "best" (best single set) or "daily" (daily total).');
       const rawDeadline = text(input.deadline);
       if (rawDeadline && !isDayKey(rawDeadline)) return fail(`deadline "${rawDeadline}" is not valid. ${DAY_FORMAT}`);
-      const goal = createGoal({ title, target, type, deadline: rawDeadline ?? null });
+      const goal = createGoal({
+        title,
+        target,
+        type,
+        deadline: rawDeadline ?? null,
+        description: text(input.description),
+        unit: text(input.unit),
+      });
       if (!goal) return fail('Could not create that goal.');
       return ok(
         { created: describeGoalResult(goal) },
@@ -424,29 +561,97 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
           kind: 'goal_created',
           label: `Created goal "${goal.title}"`,
           area: 'Goal',
-          detail: `Created "${goal.title}" · target ${formatAmount(goal.target)}`,
+          detail: `Created "${goal.title}" · ${GOAL_TYPE_LABELS[goal.type].toLowerCase()} · target ${formatAmount(goal.target)}`,
           undo: { kind: 'deleteGoal', id: goal.id },
         },
       );
     }
 
-    case 'set_deadline': {
+    case 'edit_goal': {
       const goal = findGoal(input.goal_id);
       if ('content' in goal) return goal;
-      const raw = text(input.date);
-      if (raw && !isDayKey(raw)) return fail(`date "${raw}" is not valid. ${DAY_FORMAT} Use null to clear it.`);
-      setGoalDeadline(goal.id, raw ?? null);
+      const edit: GoalEdit = {};
+      const changes: string[] = [];
+      if (input.title !== undefined) {
+        const title = text(input.title);
+        if (!title) return fail('title cannot be empty.');
+        edit.title = title;
+        changes.push(`name "${title}"`);
+      }
+      if (input.type !== undefined) {
+        const type = goalType(input.type);
+        if (!type) return fail('type must be "best" or "daily".');
+        edit.type = type;
+        changes.push(GOAL_TYPE_LABELS[type].toLowerCase());
+      }
+      if (input.target !== undefined) {
+        const target = positiveNumber(input.target);
+        if (target === null) return fail('target must be a positive number.');
+        edit.target = target;
+        changes.push(`target ${formatAmount(goal.target)} → ${formatAmount(target)}`);
+      }
+      if (input.unit !== undefined) {
+        edit.unit = typeof input.unit === 'string' ? input.unit : '';
+        changes.push(`unit "${edit.unit}"`);
+      }
+      if ('deadline' in input) {
+        const raw = text(input.deadline);
+        if (raw && !isDayKey(raw)) return fail(`deadline "${raw}" is not valid. ${DAY_FORMAT} Use null to clear it.`);
+        edit.deadline = raw ?? null;
+        changes.push(raw ? `deadline ${formatDayKey(raw)}` : 'no deadline');
+      }
+      if (input.description !== undefined) {
+        edit.description = typeof input.description === 'string' ? input.description : '';
+        changes.push('description');
+      }
+      if (changes.length === 0) return fail('Nothing to change: pass at least one field.');
+      const before = editGoal(goal.id, edit);
+      if (!before) return fail('Could not change that goal.');
       const updated = getCoachState().goals.find((g) => g.id === goal.id)!;
       return ok(
         { updated: describeGoalResult(updated) },
         {
-          kind: 'deadline_set',
-          label: raw
-            ? `Deadline for "${goal.title}" set to ${formatDayKey(raw)}`
-            : `Removed deadline from "${goal.title}"`,
+          kind: 'goal_edited',
+          label: `Changed "${goal.title}": ${changes.join(', ')}`,
           area: 'Goal',
-          detail: raw ? `Deadline ${formatDayKey(raw)} · ${goal.title}` : `Deadline removed · ${goal.title}`,
-          undo: { kind: 'setDeadline', goalId: goal.id, deadline: goal.deadline },
+          detail: `${goal.title} · ${changes.join(', ')}`,
+          undo: { kind: 'restoreGoalDetails', goal: before },
+        },
+      );
+    }
+
+    case 'delete_goal': {
+      const goal = findGoal(input.goal_id);
+      if ('content' in goal) return goal;
+      if (goal.featured) return fail("That's the featured goal, which can't be deleted. Feature another goal first.");
+      const removed = deleteGoal(goal.id);
+      if (!removed) return fail('Could not delete that goal.');
+      return ok(
+        { deleted: { id: goal.id, title: goal.title, sets_removed: removed.entries.length } },
+        {
+          kind: 'goal_deleted',
+          label: `Deleted goal "${goal.title}"`,
+          area: 'Goal',
+          detail: `Deleted "${goal.title}" and its ${removed.entries.length} ${removed.entries.length === 1 ? 'set' : 'sets'}`,
+          undo: { kind: 'restoreGoal', goal: removed.goal, entries: removed.entries, index: removed.index },
+        },
+      );
+    }
+
+    case 'set_featured_goal': {
+      const goal = findGoal(input.goal_id);
+      if ('content' in goal) return goal;
+      const previous = getFeaturedGoal(getCoachState());
+      if (previous.id === goal.id) return ok({ featured: describeGoalResult(goal), unchanged: true });
+      setFeaturedGoal(goal.id);
+      return ok(
+        { featured: describeGoalResult(goal), previously_featured: previous.title },
+        {
+          kind: 'goal_featured',
+          label: `Featured "${goal.title}" on Today`,
+          area: 'Goal',
+          detail: `"${goal.title}" is now on Today (was "${previous.title}")`,
+          undo: { kind: 'setFeatured', goalId: previous.id },
         },
       );
     }
@@ -767,6 +972,24 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
       const day = range === 'today' ? today : addDays(today, 1);
       const results = eventsOnDay(events, day).map((e) => describeEventResult(e, day));
       return ok({ range, count: results.length, events: results });
+    }
+
+    case 'get_journal': {
+      const { from, to } = input;
+      if (!isDayKey(from) || !isDayKey(to)) return fail('from and to must be dates as "YYYY-MM-DD".');
+      if (to < from) return fail('to must be on or after from.');
+      if (daysBetween(from, to) >= MAX_JOURNAL_DAYS) return fail(`Ask for at most ${MAX_JOURNAL_DAYS} days at a time.`);
+      const clipAnswer = (s: string) =>
+        s.length > MAX_JOURNAL_ANSWER_CHARS ? `${s.slice(0, MAX_JOURNAL_ANSWER_CHARS - 1)}…` : s;
+      const entries = dailyEntriesBetween(getDailyState(), from, to).map((e) => ({
+        date: e.date,
+        day: formatDayKey(e.date),
+        mood: e.mood ? `${moodOf(e.mood).label} (${e.mood}/5)` : null,
+        went_well: clipAnswer(e.wentWell.trim()),
+        got_in_the_way: clipAnswer(e.gotInTheWay.trim()),
+        tomorrow_focus: clipAnswer(e.tomorrowFocus.trim()),
+      }));
+      return ok({ from, to, days_in_range: daysBetween(from, to) + 1, days_written: entries.length, entries });
     }
 
     default:
