@@ -63,6 +63,9 @@ export function Sidebar({ route, journalSection, journalFolder, openNoteId, onNa
   const { state: notesState } = useNotes();
   const inJournal = route === 'Journal';
   const pinned = pinnedNotes(notesState.notes);
+  // A rule between the fixed links and the scrolling part, once something has
+  // scrolled under it.
+  const [scrolled, setScrolled] = useState(false);
 
   // With a note open, the sub-link for its kind stays lit, so the sidebar agrees with
   // the page's breadcrumb ("Journal / Quick notes / ...").
@@ -101,63 +104,69 @@ export function Sidebar({ route, journalSection, journalFolder, openNoteId, onNa
         <Text style={[type.label, styles.kbd]}>⌘K</Text>
       </View>
 
-      {/* The part that can outgrow a short window: nav, pinned notes, schedule tools. */}
-      <ScrollView style={styles.middle} contentContainerStyle={styles.middleContent} showsVerticalScrollIndicator={false}>
+      {/* The four sections stay put; only what's below them scrolls (it's the part
+          that can outgrow a short window). Settings stays put at the bottom. */}
+      <View style={styles.navArea}>
         <View style={styles.nav}>
-          {NAV.map((item) => {
-            const active = route === item.target.screen;
-            return (
-              <View key={item.label}>
-                <NavLink
-                  label={item.label}
-                  icon={item.icon}
-                  active={active && !(inJournal && (activeSection || activeFolder))}
-                  activeColor={accent.accent}
-                  onPress={() => onNavigate(item.target)}
-                />
-                {item.target.screen === 'Journal' && (
-                  <View style={styles.subList}>
-                    {JOURNAL_LINKS.map((link) => (
-                      <NavLink
-                        key={link.section}
-                        label={link.label}
-                        sub
-                        active={inJournal && activeSection === link.section}
-                        activeColor={accent.accent}
-                        onPress={() => onNavigate({ screen: 'Journal', section: link.section })}
-                      />
-                    ))}
-                    <SidebarFolders
-                      activeFolderId={activeFolder}
-                      activeColor={accent.accent}
-                      onOpen={(folder) => onNavigate({ screen: 'Journal', folder })}
-                    />
-                  </View>
-                )}
-              </View>
-            );
-          })}
+          {NAV.map((item) => (
+            <NavLink
+              key={item.label}
+              label={item.label}
+              icon={item.icon}
+              active={route === item.target.screen && !(inJournal && (activeSection || activeFolder))}
+              activeColor={accent.accent}
+              onPress={() => onNavigate(item.target)}
+            />
+          ))}
         </View>
+        <View style={[styles.scrollEdge, scrolled && styles.scrollEdgeOn]} />
 
-        {pinned.length > 0 ? (
-          <View style={styles.pinned}>
-            <Text style={[type.label, styles.blockLabel]}>Pinned</Text>
-            {pinned.map((note) => (
+        <ScrollView
+          style={styles.middle}
+          contentContainerStyle={styles.middleContent}
+          showsVerticalScrollIndicator={false}
+          onScroll={(e) => setScrolled(e.nativeEvent.contentOffset.y > 0)}
+          scrollEventThrottle={16}
+        >
+          {/* Journal is the last of the four, so its sub-links still sit right under it. */}
+          <View style={styles.subList}>
+            {JOURNAL_LINKS.map((link) => (
               <NavLink
-                key={note.id}
-                label={noteTitle(note)}
-                icon={NOTE_ICONS[note.type]}
+                key={link.section}
+                label={link.label}
                 sub
-                active={inJournal && openNoteId === note.id}
+                active={inJournal && activeSection === link.section}
                 activeColor={accent.accent}
-                onPress={() => onNavigate({ screen: 'Journal', noteId: note.id })}
+                onPress={() => onNavigate({ screen: 'Journal', section: link.section })}
               />
             ))}
+            <SidebarFolders
+              activeFolderId={activeFolder}
+              activeColor={accent.accent}
+              onOpen={(folder) => onNavigate({ screen: 'Journal', folder })}
+            />
           </View>
-        ) : null}
 
-        {route === 'Schedule' ? <ScheduleTools /> : null}
-      </ScrollView>
+          {pinned.length > 0 ? (
+            <View style={styles.pinned}>
+              <Text style={[type.label, styles.blockLabel]}>Pinned</Text>
+              {pinned.map((note) => (
+                <NavLink
+                  key={note.id}
+                  label={noteTitle(note)}
+                  icon={NOTE_ICONS[note.type]}
+                  sub
+                  active={inJournal && openNoteId === note.id}
+                  activeColor={accent.accent}
+                  onPress={() => onNavigate({ screen: 'Journal', noteId: note.id })}
+                />
+              ))}
+            </View>
+          ) : null}
+
+          {route === 'Schedule' ? <ScheduleTools /> : null}
+        </ScrollView>
+      </View>
 
       <NavLink
         label="Settings"
@@ -405,6 +414,10 @@ const styles = StyleSheet.create({
   showBox: { width: 16, height: 16, borderRadius: 4, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   showText: { fontSize: 13 },
   showTextOff: { color: colors.textMuted },
+  navArea: { flex: 1 },
+  // Always 1px tall, so the rule appearing doesn't nudge the list.
+  scrollEdge: { height: 1 },
+  scrollEdgeOn: { backgroundColor: colors.border },
   middle: { flex: 1, marginHorizontal: -spacing.xs },
   middleContent: { gap: spacing.lg, paddingHorizontal: spacing.xs },
   pinned: { gap: 2, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md },

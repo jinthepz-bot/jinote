@@ -48,6 +48,26 @@ function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   );
 }
 
+// The coach panel's version: one line, then this screen's suggestion chips right under
+// it at the top. Once the chat has started, the chips move back above the input.
+function PanelEmptyState({
+  suggestions,
+  disabled,
+  onPick,
+}: {
+  suggestions: string[];
+  disabled: boolean;
+  onPick: (text: string) => void;
+}) {
+  const type = useType();
+  return (
+    <View style={styles.panelEmpty}>
+      <Text style={type.body}>Ask me anything, or tell me what you did.</Text>
+      <SuggestionChips suggestions={suggestions} disabled={disabled} onPick={onPick} style={styles.panelChips} />
+    </View>
+  );
+}
+
 // A bordered chevron matching the Settings gear, so the panel's two header controls
 // are the same size and shape.
 function CollapseButton({ onPress }: { onPress: () => void }) {
@@ -149,12 +169,20 @@ export function ChatScreen({
           }
           contentContainerStyle={styles.list}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
-          ListEmptyComponent={loaded ? <EmptyState onPick={send} /> : null}
+          ListEmptyComponent={
+            !loaded ? null : embedded ? (
+              <PanelEmptyState suggestions={suggestions} disabled={activity.kind !== 'idle'} onPick={send} />
+            ) : (
+              <EmptyState onPick={send} />
+            )
+          }
           ListFooterComponent={activity.kind === 'thinking' ? <ThinkingBubble retrying={activity.retrying} /> : null}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
         />
-        {embedded ? <SuggestionChips suggestions={suggestions} disabled={activity.kind !== 'idle'} onPick={send} /> : null}
+        {embedded && messages.length > 0 ? (
+          <SuggestionChips suggestions={suggestions} disabled={activity.kind !== 'idle'} onPick={send} />
+        ) : null}
         <Composer busy={activity.kind !== 'idle'} onSend={send} onStop={stop} />
       </KeyboardAvoidingView>
     </View>
@@ -169,6 +197,8 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 38, lineHeight: 42, letterSpacing: 1 },
   emptyBody: { color: colors.textMuted },
   examplesLabel: { marginTop: spacing.xs },
+  panelEmpty: { gap: spacing.md },
+  panelChips: { paddingHorizontal: 0, paddingTop: 0 },
   example: {
     backgroundColor: colors.surface,
     borderWidth: 1,

@@ -1,17 +1,28 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
 import { hoverFill } from '../design/hover';
 import { colors, radius, spacing } from '../design/theme';
 
-// One-tap prompts above the coach's input; clicking one sends it as is.
-export function SuggestionChips({ suggestions, disabled, onPick }: { suggestions: string[]; disabled: boolean; onPick: (text: string) => void }) {
+// One-tap prompts above the coach's input (or, before the chat has started, under the
+// panel's intro line); clicking one sends it as is.
+export function SuggestionChips({
+  suggestions,
+  disabled,
+  onPick,
+  style,
+}: {
+  suggestions: string[];
+  disabled: boolean;
+  onPick: (text: string) => void;
+  style?: StyleProp<ViewStyle>;
+}) {
   const type = useType();
   const accent = useAccent();
   if (suggestions.length === 0) return null;
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, style]}>
       {suggestions.map((s) => (
         <Pressable
           key={s}
