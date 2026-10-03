@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { backend } from './agent';
 import { buildCoachContext } from './agent/context';
@@ -10,31 +10,30 @@ import { getCoachState } from './coach/store';
 import { getDailyState } from './journal/store';
 import { getNotesState } from './notes/store';
 import { getScheduleState } from './schedule/store';
-import { loadMessages, saveMessages } from './storage';
+import { chatStore } from './storage';
 import { makeId, type Activity, type AppMessage, type TextMessage } from './types';
 
 function textMessage(role: TextMessage['role'], text: string, extra: Partial<TextMessage> = {}): TextMessage {
   return { id: makeId(), kind: 'text', role, text, createdAt: Date.now(), ...extra };
 }
 
+// Writes go straight to the store (and so to storage, and to the other device when
+// signed in); `messagesRef` reads it at call time, so a reply lands after whatever
+// arrived meanwhile.
+function setMessages(next: AppMessage[] | ((prev: AppMessage[]) => AppMessage[])) {
+  chatStore.update((prev) => (typeof next === 'function' ? next(prev) : next));
+}
+
+const messagesRef = {
+  get current() {
+    return chatStore.get();
+  },
+};
+
 export function useAgentChat() {
-  const [messages, setMessages] = useState<AppMessage[]>([]);
+  const { state: messages, loaded } = chatStore.useStore();
   const [activity, setActivity] = useState<Activity>({ kind: 'idle' });
-  const [loaded, setLoaded] = useState(false);
-  const messagesRef = useRef(messages);
   const abortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    loadMessages().then((stored) => {
-      setMessages(stored);
-      setLoaded(true);
-    });
-  }, []);
-
-  useEffect(() => {
-    messagesRef.current = messages;
-    if (loaded) saveMessages(messages);
-  }, [messages, loaded]);
 
   // One turn of the coach on `history` (which ends with what it should answer). Its
   // reply, or what went wrong, is added after it.

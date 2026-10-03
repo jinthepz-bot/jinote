@@ -13,6 +13,8 @@ import { pinnedNotes, useNotes, type NoteType } from '../notes/store';
 import type { CalendarKind } from '../schedule/calendar/items';
 import { kindColors } from '../schedule/calendar/kindColors';
 import { goToDay, toggleFilter, useCalendarView, type CalendarFilters } from '../schedule/calendar/viewStore';
+import { syncConfigured } from '../sync/client';
+import { SYNC_ICONS, syncLabel, useSyncStatus, type SyncPhase } from '../sync/status';
 import { MiniMonth } from './MiniMonth';
 import { SidebarFolders } from './SidebarFolders';
 import { SIDEBAR_RAIL_WIDTH, SIDEBAR_WIDTH } from './layout';
@@ -168,6 +170,14 @@ export function Sidebar({ route, journalSection, journalFolder, openNoteId, onNa
         </ScrollView>
       </View>
 
+      {syncConfigured ? (
+        <SyncLine
+          onPress={() => {
+            onClose?.();
+            openSettings();
+          }}
+        />
+      ) : null}
       <NavLink
         label="Settings"
         icon="settings-outline"
@@ -204,10 +214,43 @@ export function SidebarRail({ route, onNavigate, onExpand }: { route: string; on
         })}
       </View>
       <View style={styles.flex} />
+      {syncConfigured ? <RailSync onPress={() => openSettings()} /> : null}
       <RailButton label="Settings" onPress={() => openSettings()}>
         <Ionicons name="settings-outline" size={20} color={colors.text} />
       </RailButton>
     </View>
+  );
+}
+
+const syncTint = (phase: SyncPhase) =>
+  phase === 'error' ? colors.deadlineRed : phase === 'synced' ? colors.success : colors.textMuted;
+
+// Above Settings: "Synced", "Syncing…", "Offline"… Opens Settings, where the details are.
+function SyncLine({ onPress }: { onPress: () => void }) {
+  const type = useType();
+  const status = useSyncStatus();
+  const label = syncLabel(status);
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}. Open sync settings`}
+      style={(state) => [styles.syncLine, hoverFill(state)]}
+    >
+      <Ionicons name={SYNC_ICONS[status.phase]} size={15} color={syncTint(status.phase)} />
+      <Text style={[type.body, styles.syncText]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function RailSync({ onPress }: { onPress: () => void }) {
+  const status = useSyncStatus();
+  return (
+    <RailButton label={syncLabel(status)} onPress={onPress}>
+      <Ionicons name={SYNC_ICONS[status.phase]} size={20} color={syncTint(status.phase)} />
+    </RailButton>
   );
 }
 
@@ -423,6 +466,16 @@ const styles = StyleSheet.create({
   pinned: { gap: 2, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md },
   blockLabel: { paddingHorizontal: spacing.sm + 2, paddingBottom: 4 },
   linkText: { flexShrink: 1 },
+  syncLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 28,
+    marginBottom: -spacing.sm,
+    paddingHorizontal: spacing.sm + 2,
+    borderRadius: radius.control,
+  },
+  syncText: { fontSize: 13, color: colors.textMuted },
   link: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -32,6 +32,13 @@ jobs:
 
       - name: Build web app
         run: npm run build:web
+        # Cloud sync (optional): the Supabase project URL and its *publishable* key,
+        # stored as repository secrets so they stay out of git. Both are public by
+        # design once the site is built; Row Level Security protects the data.
+        # Never add the secret key here.
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

@@ -1,26 +1,17 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import { createPersistedStore } from './storage/persistedStore';
 import type { AppMessage } from './types';
 
+// The coach chat, kept in a store like everything else so cloud sync can see it (only
+// its newest messages travel; see sync/collections.ts).
 const KEY = 'jinesis.messages.v1';
 
-export async function loadMessages(): Promise<AppMessage[]> {
-  try {
-    const raw = await AsyncStorage.getItem(KEY);
-    if (!raw) return [];
-    return markInterrupted(JSON.parse(raw) as AppMessage[]);
-  } catch (err) {
-    console.warn('Failed to load chat history', err);
-    return [];
-  }
-}
-
-export async function saveMessages(messages: AppMessage[]): Promise<void> {
-  try {
-    await AsyncStorage.setItem(KEY, JSON.stringify(messages));
-  } catch (err) {
-    console.warn('Failed to save chat history', err);
-  }
+function normalize(raw: unknown): AppMessage[] {
+  if (!Array.isArray(raw)) return [];
+  const messages = raw.filter(
+    (m): m is AppMessage =>
+      typeof m === 'object' && m !== null && typeof m.id === 'string' && (m.kind === 'text' || m.kind === 'task'),
+  );
+  return markInterrupted(messages);
 }
 
 // A task that was mid-run when the app closed can't resume, so show it as stopped.
@@ -34,3 +25,10 @@ function markInterrupted(messages: AppMessage[]): AppMessage[] {
     };
   });
 }
+
+export const chatStore = createPersistedStore<AppMessage[]>({
+  key: KEY,
+  initial: [],
+  normalize,
+  label: 'chat history',
+});

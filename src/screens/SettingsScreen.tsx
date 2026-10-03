@@ -27,6 +27,8 @@ import {
   useNotificationPrefs,
 } from '../notifications/store';
 import { resetSchedule } from '../schedule/store';
+import { forgetSyncState, isSignedIn } from '../sync/engine';
+import { SyncSection } from '../sync/SyncCard';
 import { isTimeKey, sanitizeTimeInput } from '../schedule/time';
 
 // Turns a type on with a permission prompt the first time it's needed, never before —
@@ -151,6 +153,8 @@ export function SettingsScreen({ onClose }: { onClose: () => void }) {
             </>
           )}
         </Section>
+
+        <SyncSection />
 
         <DataSection />
       </ScrollView>
@@ -292,12 +296,19 @@ function DataSection() {
     });
   };
 
-  const confirmReset = () =>
+  // Signed in, a reset is an edit like any other and reaches every device. Signed
+  // out, it's this device only: it also forgets what it synced, so signing in again
+  // brings everything back from the cloud.
+  const confirmReset = () => {
+    const everywhere = isSignedIn();
     confirmDestructive({
-      title: 'Reset all data?',
-      message:
-        'This permanently deletes your goals and their progress, tasks, to-buy list, notes, daily journal and schedule on this device. ' +
-        "Chat isn't affected. Export first if you might want it back.",
+      title: everywhere ? 'Reset all data everywhere?' : 'Reset all data?',
+      message: everywhere
+        ? 'You’re signed in, so this permanently deletes your goals and their progress, tasks, to-buy list, notes, daily journal ' +
+          'and schedule on this device, in your account and on your other signed-in devices. ' +
+          "Chat isn't affected. To reset only this device, sign out first."
+        : 'This permanently deletes your goals and their progress, tasks, to-buy list, notes, daily journal and schedule on this device. ' +
+          "Chat isn't affected. Export first if you might want it back.",
       confirmLabel: 'Reset',
       onConfirm: () => {
         resetCoachData();
@@ -306,16 +317,18 @@ function DataSection() {
         }
         resetSchedule();
         resetDaily();
+        if (!everywhere) forgetSyncState();
         setStatus({ tone: 'ok', text: 'All data reset.' });
       },
     });
+  };
 
   return (
     <Section label="Your data" aside={describeCountsShort(counts)}>
       <Card style={styles.card}>
         <Text style={[type.body, styles.muted]}>
-          Everything stays on this device. Export writes one file you can keep or move to another phone; importing it
-          replaces what's here.
+          Export writes one file with everything, to keep as a backup; importing one replaces what's here (and, when
+          you're signed in to sync, on your other devices too).
         </Text>
 
         <View style={styles.dataButtons}>

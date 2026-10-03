@@ -13,11 +13,24 @@ interface Options<T> {
 }
 
 export interface PersistedStore<T> {
+  key: string;
   ready: Promise<void>;
   get: () => T;
   set: (next: T) => void;
   update: (fn: (state: T) => T) => void;
+  // Turns any stored or received value into valid state (the same check a load runs).
+  normalize: (raw: unknown) => T;
+  // For code outside React (cloud sync): called after every change.
+  subscribe: (listener: () => void) => () => void;
   useStore: () => { state: T; loaded: boolean };
+}
+
+// Every store by its storage key, so cloud sync (see sync/) can read, watch and
+// update them without each store module knowing about it.
+const registry = new Map<string, PersistedStore<unknown>>();
+
+export function registeredStore(key: string): PersistedStore<unknown> | undefined {
+  return registry.get(key);
 }
 
 // In-memory state mirrored to one AsyncStorage key, with a React hook.
@@ -69,11 +82,16 @@ export function createPersistedStore<T>({ key, initial, normalize, migrate, labe
     };
   };
 
-  return {
+  const store: PersistedStore<T> = {
+    key,
     ready,
     get: () => snapshot.state,
     set,
     update: (fn) => set(fn(snapshot.state)),
+    normalize,
+    subscribe,
     useStore: () => useSyncExternalStore(subscribe, () => snapshot),
   };
+  registry.set(key, store as PersistedStore<unknown>);
+  return store;
 }

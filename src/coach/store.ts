@@ -258,6 +258,20 @@ function recomputeCurrent(goal: Goal, entries: LogEntry[], floor: number): numbe
   return goal.current;
 }
 
+// After sets arrive from another device (cloud sync): records and running totals
+// follow the merged log. A record never drops here — deleting a set is what lowers
+// one, and that edit travels with the goal itself.
+export function withRecomputedGoals(state: CoachState): CoachState {
+  let changed = false;
+  const goals = state.goals.map((goal) => {
+    const current = recomputeCurrent(goal, state.entries, goal.type === 'best' ? goal.current : 0);
+    if (current === goal.current) return goal;
+    changed = true;
+    return { ...goal, current };
+  });
+  return changed ? { ...state, goals } : state;
+}
+
 export interface LogResult {
   entryIds: string[];
   isNewBest: boolean;

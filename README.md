@@ -160,6 +160,22 @@ Because the plan is only rebuilt while the app is running, the rolling window is
 
 `notifications/store.ts`, `plan.ts` and `voice.ts` have no native imports, so the logic is testable under plain Node the same way `notes/store.ts` is. On web the whole feature reports itself unsupported instead of half-working.
 
+## Cloud sync (optional)
+
+Sign in once per device (Google in the browser, or a 6-digit email code anywhere) and the Mac and the phone share the same data through a free Supabase project. Without signing in — or without a project configured — the app is local-only, exactly as before.
+
+- **Offline-first.** Each device keeps everything locally and works fully offline; changes upload about 2 seconds after they happen, and other devices' changes download when the app starts, comes back to the front, reconnects, and every minute while open. Status (Synced / Syncing / Offline) is in Settings → Sync and above Settings in the sidebar.
+- **Merging.** One row per item (goal, set, task, to-buy item, event with its one-day changes, note with its checklist/recipe/tags/pin/folder, folder, Daily journal day, chat message, settings group). The newest edit of an item wins, and the database refuses an older edit over a newer one. Deletions travel as small "deleted" markers. On a device's first sign-in its data is merged in, nothing is dropped; for data from before sync existed, where the same item differs and neither copy has a newer edit time, the copy already in the cloud wins — so sign in first on the device with your main data.
+- **What stays on each device:** the calendar's view and zoom, whether the coach panel is open, and recipe photo files. The chat syncs its newest 200 messages.
+- **Security.** Row Level Security limits every row to its owner (see [supabase/schema.sql](supabase/schema.sql)). The app only holds the project URL and the *publishable* key, which are public by design; never use the secret key.
+
+**Setup:** create a Supabase project, run `supabase/schema.sql` in its SQL Editor, enable Email (with `{{ .Token }}` in the Magic Link and Confirm signup templates) and Google sign-in, then put these in `.env` (and, for the deployed site, as GitHub Actions repository secrets of the same names) and restart Expo with `-c`, since Metro caches inlined env values:
+
+```
+EXPO_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+```
+
 ## Deploying as a web app (PWA)
 
 The web build is a static site — no server, no accounts, no shared backend. Everyone who opens it gets their own local data in their own browser, exactly like the phone app.
