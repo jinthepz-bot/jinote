@@ -37,13 +37,13 @@ import { RoundCheck } from './RoundCheck';
 import { SeriesChoiceCard, type SeriesScope } from './SeriesChoiceCard';
 import { MiniMonth } from '../../navigation/MiniMonth';
 import { gridLines, kindColors } from './kindColors';
-import { ZOOM_LEVELS } from './viewStore';
+import { TIME_GUTTER_WIDTH, ZOOM_LEVELS } from './viewStore';
 
 // The grid always covers the whole day. Fitting all 24 hours on screen is the
 // default (zoom 0); the other levels step up to MAX_HOUR_HEIGHT and scroll.
 const HOURS_IN_DAY = 24;
 const MAX_HOUR_HEIGHT = 52;
-const TIME_WIDTH = 56;
+const TIME_WIDTH = TIME_GUTTER_WIDTH;
 const SLOTS_PER_HOUR = 2; // clicking empty space snaps to the half hour
 const LABEL_INSET = 8; // headroom so the first hour label isn't clipped
 const MIN_BLOCK_HEIGHT = 11;
@@ -82,7 +82,7 @@ function useNowMinutes(): number {
 }
 
 interface Props {
-  days: string[]; // one day key per column: 1 in day view, 7 in week view
+  days: string[]; // one day key per column: 1 in day view, 7 in week view (3 when narrow)
   todayKey: string;
   selectedDate: string; // the day the sidebar and the tinted column agree on
   itemsByDay: CalendarItem[][]; // parallel to `days`

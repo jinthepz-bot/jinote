@@ -5,10 +5,8 @@ import { hoverDim } from '../design/hover';
 import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
 import { colors, radius } from '../design/theme';
-import type { AccentPalette } from '../design/theme';
-import { eventsOnDay } from './occurrences';
-import { minutesOf } from './time';
-import type { EventColor, ScheduleEvent } from './store';
+import { allDayItems, layoutDay, spanOf, type CalendarItem, type PositionedItem } from './calendar/items';
+import { kindColors } from './calendar/kindColors';
 
 const START_HOUR = 0;
 const END_HOUR = 24;
@@ -16,91 +14,72 @@ const HOUR_HEIGHT = 56;
 const TIME_WIDTH = 48;
 const MIN_DAY_WIDTH = 100;
 
-// An event's colour choice is stored as a role ("accent", "soft"), not a hex, so
-// every event follows the accent the user picks in Settings.
-function blockColors(
-  accent: AccentPalette,
-): Record<EventColor, { backgroundColor: string; borderColor: string; textColor: string }> {
-  return {
-    accent: { backgroundColor: accent.accent, borderColor: accent.accent, textColor: accent.onAccent },
-    soft: { backgroundColor: accent.accentSoft, borderColor: accent.accent, textColor: colors.text },
-    strong: { backgroundColor: colors.accentStrongSoft, borderColor: colors.accentStrong, textColor: colors.text },
-    success: { backgroundColor: colors.successSoft, borderColor: colors.success, textColor: colors.text },
-  };
-}
+// The phone's week: the same items as the desktop calendar (events, dated tasks, goal
+// sessions and deadlines), in the same kind colours (see calendar/kindColors), so a
+// blue block is an event and a green one a session on either screen.
 
-interface PositionedEvent {
-  event: ScheduleEvent;
-  column: number;
-  columns: number;
-  top: number;
-  height: number;
-}
-
-function positionedEvents(events: ScheduleEvent[]): PositionedEvent[] {
-  const sorted = [...events].sort((a, b) => minutesOf(a.startTime) - minutesOf(b.startTime));
-  const columns: number[] = [];
-  const positioned: PositionedEvent[] = [];
-
-  for (const event of sorted) {
-    const start = minutesOf(event.startTime);
-    const end = Math.max(start + 30, event.endTime ? minutesOf(event.endTime) : start + 60);
-    let column = columns.findIndex((lastEnd) => lastEnd <= start);
-    if (column < 0) column = columns.length;
-    columns[column] = end;
-    positioned.push({
-      event,
-      column,
-      columns: 1,
-      top: (start / 60 - START_HOUR) * HOUR_HEIGHT,
-      height: Math.max(28, ((end - start) / 60) * HOUR_HEIGHT),
-    });
-  }
-
-  for (const item of positioned) {
-    const start = minutesOf(item.event.startTime);
-    const end = Math.max(start + 30, item.event.endTime ? minutesOf(item.event.endTime) : start + 60);
-    item.columns = Math.max(
-      1,
-      positioned.filter((other) => {
-        const otherStart = minutesOf(other.event.startTime);
-        const otherEnd = Math.max(otherStart + 30, other.event.endTime ? minutesOf(other.event.endTime) : otherStart + 60);
-        return otherStart < end && otherEnd > start;
-      }).length,
-    );
-  }
-  return positioned;
-}
-
-function EventBlock({ item, onPress }: { item: PositionedEvent; onPress: () => void }) {
+function ItemBlock({ positioned, onPress }: { positioned: PositionedItem; onPress?: () => void }) {
   const type = useType();
-  const accent = useAccent();
-  const palette = blockColors(accent)[item.event.color];
+  const { item, lane, lanes } = positioned;
+  const tint = kindColors(item.kind);
+  const { start, end } = spanOf(item);
+  const top = ((start - START_HOUR * 60) / 60) * HOUR_HEIGHT;
+  const height = Math.max(28, ((end - start) / 60) * HOUR_HEIGHT);
   return (
     <Pressable
       onPress={onPress}
+      disabled={!onPress}
       style={(state) => [
-        styles.event,
-        palette,
+        styles.block,
         {
-          top: item.top + 2,
-          height: item.height - 4,
-          left: `${(item.column * 100) / item.columns}%`,
-          width: `${100 / item.columns}%`,
+          top: top + 2,
+          height: height - 4,
+          left: `${(lane * 100) / lanes}%`,
+          width: `${100 / lanes}%`,
+          backgroundColor: tint.background,
+          borderColor: tint.border,
         },
-        hoverDim(state),
+        item.done && styles.done,
+        onPress && hoverDim(state),
       ]}
-      accessibilityRole="button"
-      accessibilityLabel={`Edit ${item.event.title}`}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={onPress ? `Edit ${item.title}` : `${item.title}${item.timeLabel ? `, ${item.timeLabel}` : ''}`}
     >
-      <Text style={[type.bodyStrong, styles.eventText, { color: palette.textColor }]} numberOfLines={2}>
-        {item.event.title}
+      <Text
+        style={[type.bodyStrong, styles.blockText, { color: tint.text }, item.done && styles.doneText]}
+        numberOfLines={2}
+      >
+        {item.title}
       </Text>
-      {item.height >= 58 && item.event.location ? (
-        <Text style={[type.mono, styles.eventLocationText, { color: palette.textColor }]} numberOfLines={1}>
-          {item.event.location}
+      {height >= 58 && item.source.kind === 'event' && item.source.event.location ? (
+        <Text style={[type.mono, styles.blockLocation, { color: tint.text }]} numberOfLines={1}>
+          {item.source.event.location}
         </Text>
       ) : null}
+    </Pressable>
+  );
+}
+
+// A deadline, an untimed task or a set logged without a time: a pill above the hours.
+function AllDayPill({ item, onPress }: { item: CalendarItem; onPress?: () => void }) {
+  const type = useType();
+  const tint = kindColors(item.kind);
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={(state) => [
+        styles.pill,
+        { backgroundColor: tint.background, borderColor: tint.border },
+        item.done && styles.done,
+        onPress && hoverDim(state),
+      ]}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={onPress ? `Edit ${item.title}` : item.title}
+    >
+      <Text style={[type.bodyStrong, styles.pillText, { color: tint.text }, item.done && styles.doneText]} numberOfLines={1}>
+        {item.title}
+      </Text>
     </Pressable>
   );
 }
@@ -108,13 +87,15 @@ function EventBlock({ item, onPress }: { item: PositionedEvent; onPress: () => v
 export function WeekGrid({
   days,
   todayKey,
-  events,
+  itemsByDay,
   onEventPress,
+  onTaskPress,
 }: {
   days: string[];
   todayKey: string;
-  events: ScheduleEvent[];
+  itemsByDay: CalendarItem[][]; // parallel to `days`
   onEventPress: (id: string) => void;
+  onTaskPress: (id: string) => void;
 }) {
   const type = useType();
   const accent = useAccent();
@@ -124,6 +105,16 @@ export function WeekGrid({
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const showCurrentLine = days.includes(todayKey) && currentMinutes >= START_HOUR * 60 && currentMinutes <= END_HOUR * 60;
+  const allDay = itemsByDay.map(allDayItems);
+  const hasAllDay = allDay.some((items) => items.length > 0);
+
+  // Sessions and deadlines have no form of their own, as on the desktop calendar.
+  const pressFor = (item: CalendarItem) => {
+    const source = item.source;
+    if (source.kind === 'event') return () => onEventPress(source.event.id);
+    if (source.kind === 'task') return () => onTaskPress(source.task.id);
+    return undefined;
+  };
 
   return (
     <View style={[styles.grid, { width: gridWidth }]}>
@@ -141,6 +132,18 @@ export function WeekGrid({
           );
         })}
       </View>
+      {hasAllDay ? (
+        <View style={styles.allDayRow}>
+          <View style={styles.timeHeader} />
+          {days.map((day, i) => (
+            <View key={day} style={styles.allDayCell}>
+              {allDay[i].map((item) => (
+                <AllDayPill key={item.id} item={item} onPress={pressFor(item)} />
+              ))}
+            </View>
+          ))}
+        </View>
+      ) : null}
       <View style={styles.body}>
         <View style={[styles.timeColumn, { height: bodyHeight }]}>
           {Array.from({ length: END_HOUR - START_HOUR }, (_, index) => (
@@ -150,17 +153,15 @@ export function WeekGrid({
           ))}
         </View>
         <View style={[styles.days, { height: bodyHeight }]}>
-          {days.map((day) => {
+          {days.map((day, i) => {
             const isToday = day === todayKey;
-            // The shared rule, so an occurrence moved on its own shows where it went.
-            const dayEvents = eventsOnDay(events, day);
             return (
               <View key={day} style={[styles.dayColumn, isToday && { backgroundColor: accent.accentSoft }]}>
                 {Array.from({ length: END_HOUR - START_HOUR }, (_, index) => (
                   <View key={index} style={[styles.hourLine, { top: index * HOUR_HEIGHT }]} />
                 ))}
-                {positionedEvents(dayEvents).map((item) => (
-                  <EventBlock key={`${item.event.id}:${item.event.startTime}`} item={item} onPress={() => onEventPress(item.event.id)} />
+                {layoutDay(itemsByDay[i]).map((positioned) => (
+                  <ItemBlock key={positioned.item.id} positioned={positioned} onPress={pressFor(positioned.item)} />
                 ))}
                 {isToday && showCurrentLine ? <View style={[styles.currentLine, { top: (currentMinutes / 60) * HOUR_HEIGHT }]} /> : null}
               </View>
@@ -178,15 +179,28 @@ const styles = StyleSheet.create({
   timeHeader: { width: TIME_WIDTH },
   dayHeader: { flex: 1, minWidth: MIN_DAY_WIDTH, alignItems: 'center', justifyContent: 'center', gap: 2 },
   dayNumber: { fontSize: 13, color: colors.textMuted },
+  allDayRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: 3 },
+  allDayCell: { flex: 1, minWidth: MIN_DAY_WIDTH, gap: 2, paddingHorizontal: 2 },
+  pill: { borderWidth: 1, borderLeftWidth: 3, borderRadius: radius.control, paddingHorizontal: 4, paddingVertical: 2 },
+  pillText: { fontSize: 10 },
   body: { flexDirection: 'row' },
   timeColumn: { width: TIME_WIDTH, position: 'relative' },
   hour: { position: 'absolute', right: 6, color: colors.textMuted, fontSize: 9 },
   days: { flex: 1, flexDirection: 'row' },
   dayColumn: { flex: 1, minWidth: MIN_DAY_WIDTH, position: 'relative', borderLeftWidth: 1, borderLeftColor: colors.border },
   hourLine: { position: 'absolute', left: 0, right: 0, borderTopWidth: 1, borderTopColor: colors.border },
-  event: { position: 'absolute', padding: 5, borderLeftWidth: 3, borderRadius: radius.control, overflow: 'hidden' },
-  eventText: { fontSize: 11 },
-  eventLocationText: { fontSize: 9, marginTop: 2 },
-  pressed: { opacity: 0.7 },
-  currentLine: { position: 'absolute', left: -1, right: 0, borderTopWidth: 2, borderTopColor: colors.accentStrong, zIndex: 3 },
+  block: {
+    position: 'absolute',
+    padding: 5,
+    borderWidth: 1,
+    borderLeftWidth: 3,
+    borderRadius: radius.control,
+    overflow: 'hidden',
+  },
+  blockText: { fontSize: 11 },
+  blockLocation: { fontSize: 9, marginTop: 2 },
+  done: { opacity: 0.55 },
+  doneText: { textDecorationLine: 'line-through' },
+  // The same red as the desktop calendar's "now" line.
+  currentLine: { position: 'absolute', left: -1, right: 0, borderTopWidth: 2, borderTopColor: colors.deadlineRed, zIndex: 3 },
 });

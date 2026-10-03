@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from 'react';
 
 import { dayKey } from '../../coach/days';
+import { spacing } from '../../design/theme';
+import { useMainWidth } from '../../navigation/layout';
 import { createPersistedStore } from '../../storage/persistedStore';
 
 // What the desktop calendar is looking at. It lives outside React because two
@@ -75,6 +77,42 @@ export function setAnchor(next: string) {
 // Jumping to a date from the mini month keeps the current mode, so clicking a day
 // in month view stays in month view.
 export const goToDay = setAnchor;
+
+// --- 3 days in place of a week, when a week won't fit
+//
+// When the main column is too narrow for seven readable columns, Week view shows
+// three days from the anchor instead. That's a default, not a lock: picking Week in
+// the toolbar while narrow keeps seven columns for the rest of the session. Kept in
+// memory, so a saved "Week" still means a week on a wide window.
+
+export const WEEK_COLUMN_MIN = 88;
+export const TIME_GUTTER_WIDTH = 56; // TimeGrid's hour labels
+export const THREE_DAYS = 3;
+
+let weekWhenNarrow = false;
+const spanListeners = new Set<() => void>();
+
+export function setWeekWhenNarrow(keep: boolean) {
+  weekWhenNarrow = keep;
+  spanListeners.forEach((l) => l());
+}
+
+const subscribeSpan = (listener: () => void) => {
+  spanListeners.add(listener);
+  return () => {
+    spanListeners.delete(listener);
+  };
+};
+
+// `narrow`: a week's columns would be thinner than WEEK_COLUMN_MIN.
+// `threeDay`: Week view is showing three days because of that.
+export function useCalendarSpan(mode: CalendarMode): { narrow: boolean; threeDay: boolean } {
+  const mainWidth = useMainWidth();
+  const keepWeek = useSyncExternalStore(subscribeSpan, () => weekWhenNarrow);
+  const columns = mainWidth - spacing.lg * 2 - TIME_GUTTER_WIDTH;
+  const narrow = columns / 7 < WEEK_COLUMN_MIN;
+  return { narrow, threeDay: mode === 'week' && narrow && !keepWeek };
+}
 
 // --- reading
 

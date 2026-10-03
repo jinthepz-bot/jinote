@@ -9,6 +9,7 @@ import {
   formatDayKey,
   makeDayKey,
   MONTH_NAMES,
+  MONTHS_SHORT,
   parseDayKey,
   startOfWeek,
   weekdayIndex,
@@ -25,6 +26,7 @@ import {
   COACH_PANEL_WIDTH,
   RIGHT_SHEET_WIDTH,
   useCoachPanelCollapsed,
+  useMainWidth,
 } from '../../navigation/layout';
 import { RightSheet } from '../../navigation/RightSheet';
 import { describeEventTime, describeWeekdays } from '../format';
@@ -43,14 +45,27 @@ import {
   type ScheduleEvent,
 } from '../store';
 import { minutesOf, timeFromMinutes } from '../time';
-import { CalendarToolbar } from './CalendarToolbar';
+import { CalendarToolbar, type ToolbarView } from './CalendarToolbar';
 import { draftAsEvent, EventSheet, type EventDraft, type OccurrenceSave } from './EventSheet';
 import type { SeriesScope } from './SeriesChoiceCard';
 import type { BlockAction, DropResult, RetimeScope } from './gridInteractions';
 import { itemsOnDay, type CalendarItem } from './items';
 import { MonthView } from './MonthView';
 import { TimeGrid } from './TimeGrid';
-import { goToDay, setAnchor, setMode, setZoom, useCalendarView } from './viewStore';
+import {
+  goToDay,
+  setAnchor,
+  setMode,
+  setWeekWhenNarrow,
+  setZoom,
+  THREE_DAYS,
+  useCalendarSpan,
+  useCalendarView,
+} from './viewStore';
+
+// With the side sheet open, the calendar keeps at least this much width beside it;
+// on a window too small for that, the sheet covers the calendar's right edge instead.
+const MIN_CALENDAR_BESIDE_SHEET = 480;
 
 // Shifts a day key by whole months, clamping the day of the month (31 Jan -> 28 Feb).
 function addMonths(key: string, delta: number): string {
@@ -66,13 +81,14 @@ const monthTitle = (key: string) => {
   return `${MONTH_NAMES[p.month - 1]} ${p.year}`;
 };
 
-// "September 2026", or "September – October 2026" for a week that straddles two.
+// "September 2026", or "Sep – Oct 2026" for a week that straddles two (short names,
+// so it fits beside the toolbar's controls without being cut off).
 function rangeTitle(days: string[]): string {
   const first = parseDayKey(days[0])!;
   const last = parseDayKey(days[days.length - 1])!;
   if (first.month === last.month && first.year === last.year) return monthTitle(days[0]);
-  const firstName = MONTH_NAMES[first.month - 1];
-  const lastName = MONTH_NAMES[last.month - 1];
+  const firstName = MONTHS_SHORT[first.month - 1];
+  const lastName = MONTHS_SHORT[last.month - 1];
   return first.year === last.year
     ? `${firstName} – ${lastName} ${last.year}`
     : `${firstName} ${first.year} – ${lastName} ${last.year}`;
@@ -124,7 +140,7 @@ type SheetState =
   // put it on (they differ when it was moved on its own).
   | { mode: 'edit'; key: number; eventId: string; date: string; occurrenceDate: string };
 
-// The desktop Schedule (window width >= 1024): a calendar over the same events,
+// The desktop Schedule (window width >= 720; see navigation/layout.ts): a calendar over the same events,
 // tasks, goal deadlines and logged sessions the phone screen shows as lists.
 export function DesktopSchedule() {
   const schedule = useSchedule();
@@ -133,6 +149,8 @@ export function DesktopSchedule() {
   const { anchor, mode, filters, zoom, loaded: viewLoaded } = useCalendarView();
   const focused = useIsFocused();
   const panelCollapsed = useCoachPanelCollapsed();
+  const mainWidth = useMainWidth();
+  const { narrow, threeDay } = useCalendarSpan(mode);
   // Events are created and edited in a sheet on the right (see EventSheet); tasks
   // keep their existing dialog.
   const [sheet, setSheet] = useState<SheetState | null>(null);
@@ -169,11 +187,18 @@ export function DesktopSchedule() {
   const itemsFor = (date: string) => itemsOnDay(data, date, filters);
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(anchor), i));
-  const days = mode === 'day' ? [anchor] : weekDays;
+  const days =
+    mode === 'day'
+      ? [anchor]
+      : threeDay
+        ? Array.from({ length: THREE_DAYS }, (_, i) => addDays(anchor, i))
+        : weekDays;
+  const view: ToolbarView = threeDay ? '3day' : mode;
   const weeks = mode === 'month' ? monthWeeks(anchor) : [];
 
   const step = (delta: number) => {
     if (mode === 'day') setAnchor(addDays(anchor, delta));
+    else if (threeDay) setAnchor(addDays(anchor, delta * THREE_DAYS));
     else if (mode === 'week') setAnchor(addDays(anchor, delta * 7));
     else setAnchor(addMonths(anchor, delta));
   };
@@ -386,7 +411,17 @@ export function DesktopSchedule() {
   // calendar's right edge (or several columns, with the panel collapsed). While it's
   // open the calendar makes room for it instead of being partly hidden.
   const panelWidth = panelCollapsed ? COACH_PANEL_COLLAPSED_WIDTH : COACH_PANEL_WIDTH;
-  const sheetOverlap = sheet ? Math.max(0, RIGHT_SHEET_WIDTH - panelWidth) : 0;
+  const overlap = sheet ? Math.max(0, RIGHT_SHEET_WIDTH - panelWidth) : 0;
+  const sheetOverlap = mainWidth - overlap >= MIN_CALENDAR_BESIDE_SHEET ? overlap : 0;
+
+  // "3 days" and "Week" both mean the week mode; which one a narrow window shows is
+  // remembered for the session (see useCalendarSpan).
+  const changeView = (next: ToolbarView) => {
+    if (next === '3day' || next === 'week') {
+      if (narrow) setWeekWhenNarrow(next === 'week');
+      setMode('week');
+    } else setMode(next);
+  };
 
   // The occurrence being edited, as it is on its day (with any one-day change).
   const sheetOccurrence = (() => {
@@ -405,8 +440,9 @@ export function DesktopSchedule() {
       <View style={styles.toolbar}>
         <CalendarToolbar
           title={mode === 'month' ? monthTitle(anchor) : rangeTitle(days)}
-          mode={mode}
-          onModeChange={setMode}
+          mode={view}
+          onModeChange={changeView}
+          narrow={narrow}
           onToday={() => setAnchor(todayKey)}
           onPrevious={() => step(-1)}
           onNext={() => step(1)}
@@ -420,7 +456,7 @@ export function DesktopSchedule() {
           }}
           zoom={mode === 'month' ? null : zoom}
           onZoomChange={setZoom}
-          stepLabel={mode}
+          stepLabel={threeDay ? '3 days' : mode}
         />
       </View>
 

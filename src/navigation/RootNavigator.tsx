@@ -9,8 +9,8 @@ import {
   type Theme,
 } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
-import { useState, type ComponentProps } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useState, type ComponentProps } from 'react';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAccent } from '../design/accent';
@@ -28,11 +28,11 @@ import {
   COACH_PANEL_COLLAPSED_WIDTH,
   COACH_PANEL_WIDTH,
   useCoachPanelCollapsed,
-  useIsDesktop,
+  useLayoutMode,
 } from './layout';
 import { RightSheetHost } from './RightSheet';
 import { SettingsHost } from './SettingsHost';
-import { Sidebar, type JournalSection, type SidebarTarget } from './Sidebar';
+import { Sidebar, SidebarRail, type JournalSection, type SidebarTarget } from './Sidebar';
 
 export type RootTabParamList = {
   Home: undefined;
@@ -130,8 +130,15 @@ function ChatTab() {
 export function RootNavigator() {
   const type = useType();
   const accent = useAccent();
-  const desktop = useIsDesktop();
+  const layout = useLayoutMode();
+  const desktop = layout !== 'phone';
+  const compact = layout === 'compact';
   const coachCollapsed = useCoachPanelCollapsed();
+  // The compact layout's two overlays: the full sidebar over the rail, and the coach
+  // panel over the right of the main area. Neither is remembered — they're for a
+  // quick look, and they close when the window grows out of the compact layout.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [coachOpen, setCoachOpen] = useState(false);
   const navRef = useNavigationContainerRef<RootTabParamList>();
   const [route, setRoute] = useState<string>('Home');
   const [journalSection, setJournalSection] = useState<JournalSection | undefined>();
@@ -149,7 +156,26 @@ export function RootNavigator() {
     setJournalFolder(params?.folder);
   };
 
+  useEffect(() => {
+    if (compact) return;
+    setSidebarOpen(false);
+    setCoachOpen(false);
+  }, [compact]);
+
+  // Escape folds the open overlay back (the sidebar first, as it's on top).
+  useEffect(() => {
+    if (Platform.OS !== 'web' || (!sidebarOpen && !coachOpen)) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (sidebarOpen) setSidebarOpen(false);
+      else setCoachOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sidebarOpen, coachOpen]);
+
   const navigate = (target: SidebarTarget) => {
+    setSidebarOpen(false);
     if (target.screen === 'Journal') {
       navRef.navigate('Journal', {
         section: target.section,
@@ -194,18 +220,22 @@ export function RootNavigator() {
         {desktop ? (
           <RightSheetHost>
             <View style={styles.desktop}>
-              <Sidebar
-                route={route}
-                journalSection={journalSection}
-                journalFolder={journalFolder}
-                openNoteId={openNoteId}
-                onNavigate={navigate}
-              />
+              {compact ? (
+                <SidebarRail route={route} onNavigate={navigate} onExpand={() => setSidebarOpen(true)} />
+              ) : (
+                <Sidebar
+                  route={route}
+                  journalSection={journalSection}
+                  journalFolder={journalFolder}
+                  openNoteId={openNoteId}
+                  onNavigate={navigate}
+                />
+              )}
               <View style={styles.main}>{tabs}</View>
               {coachCollapsed ? (
                 <View style={styles.coachStrip}>
                   <Pressable
-                    onPress={() => setCoachPanelCollapsed(false)}
+                    onPress={() => (compact ? setCoachOpen(true) : setCoachPanelCollapsed(false))}
                     accessibilityRole="button"
                     accessibilityLabel="Show coach panel"
                     style={(state) => [styles.coachStripButton, hoverFill(state)]}
@@ -213,19 +243,40 @@ export function RootNavigator() {
                     <Ionicons name="chatbubble-ellipses-outline" size={20} color={accent.accent} />
                   </Pressable>
                 </View>
-              ) : (
-                <View style={styles.coach}>
-                  {/* Collapsing only unmounts the panel's view — the chat state lives in
-                      useAgentChat's store, so reopening it shows the same conversation. */}
+              ) : null}
+              {/* Collapsing only unmounts the panel's view — the chat state lives in
+                  useAgentChat's store, so reopening it shows the same conversation. */}
+              {!coachCollapsed || (compact && coachOpen) ? (
+                <View style={[styles.coach, compact && styles.coachOverlay]}>
                   <CoachPanel
                     route={route}
                     journalSection={journalSection}
                     openNoteId={openNoteId}
                     journalDay={journalDay}
-                    onCollapse={() => setCoachPanelCollapsed(true)}
+                    onCollapse={() => (compact ? setCoachOpen(false) : setCoachPanelCollapsed(true))}
                   />
                 </View>
-              )}
+              ) : null}
+              {compact && sidebarOpen ? (
+                <>
+                  <Pressable
+                    style={styles.scrim}
+                    onPress={() => setSidebarOpen(false)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close sidebar"
+                  />
+                  <View style={styles.sidebarOverlay}>
+                    <Sidebar
+                      route={route}
+                      journalSection={journalSection}
+                      journalFolder={journalFolder}
+                      openNoteId={openNoteId}
+                      onNavigate={navigate}
+                      onClose={() => setSidebarOpen(false)}
+                    />
+                  </View>
+                </>
+              ) : null}
             </View>
           </RightSheetHost>
         ) : (
@@ -245,6 +296,21 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.border,
     backgroundColor: colors.background,
   },
+  // Over the main area's right edge rather than beside it, in the compact layout.
+  coachOverlay: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 30,
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: { width: -4, height: 0 },
+    elevation: 8,
+  },
+  sidebarOverlay: { position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 41, flexDirection: 'row' },
+  scrim: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 40, backgroundColor: 'rgba(0,0,0,0.18)' },
   coachStrip: {
     width: COACH_PANEL_COLLAPSED_WIDTH,
     borderLeftWidth: 1,

@@ -17,7 +17,7 @@ import type { ScheduleEvent } from '../schedule/store';
 
 export type CoachScreen =
   | { screen: 'today' }
-  | { screen: 'schedule'; mode: 'day' | 'week' | 'month'; from: string; to: string }
+  | { screen: 'schedule'; mode: 'day' | '3day' | 'week' | 'month'; from: string; to: string }
   | { screen: 'goals' }
   | { screen: 'journal' }
   | { screen: 'note'; note: Note }
@@ -142,7 +142,7 @@ export function describeScreen(s: CoachScreen, { events, coach, daily }: ScreenD
         const items = occurrences.map(({ event }) => `${event.title} ${describeEventTime(event)} (id: ${event.id})`);
         lines.push(`- ${formatDayKey(day, todayKey)} (${day}): ${items.join('; ')}`);
       }
-      const shown = s.mode === 'week' ? 'week' : s.mode === 'day' ? 'day' : 'month';
+      const shown = s.mode === 'week' ? 'week' : s.mode === '3day' ? '3 days' : s.mode === 'day' ? 'day' : 'month';
       return [
         `ON SCREEN: the Schedule, ${shown} of ${formatDayKey(s.from, todayKey)} – ${formatDayKey(s.to, todayKey)}. ` +
           `"This week" / "here" means this range. Events in it (${count}):`,

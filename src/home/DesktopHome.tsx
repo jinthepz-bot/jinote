@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
 } from 'react-native';
 
@@ -31,10 +30,7 @@ import { useType } from '../design/fonts';
 import { colors, keyboardAppearance, radius, rgba, sizes, spacing } from '../design/theme';
 import { Card, Checkbox, fieldStyles } from '../design/ui';
 import {
-  COACH_PANEL_COLLAPSED_WIDTH,
-  COACH_PANEL_WIDTH,
-  SIDEBAR_WIDTH,
-  useCoachPanelCollapsed,
+  useMainWidth,
 } from '../navigation/layout';
 import { LogProgressSheet } from '../goals/LogProgressSheet';
 import { addQuickNote, useNotes } from '../notes/store';
@@ -92,17 +88,16 @@ function CardHeader({ title, aside }: { title: string; aside?: ReactNode }) {
   );
 }
 
-// The desktop Today screen (window width >= 1024). Same data and actions as the phone
+// The desktop Today screen (window width >= 720; see navigation/layout.ts). Same data and actions as the phone
 // Home; only the layout differs.
 export function DesktopHome() {
   const type = useType();
   const accent = useAccent();
-  const { width } = useWindowDimensions();
   const { state, loaded } = useCoach();
   const notes = useNotes();
   const schedule = useSchedule();
   const profile = useProfile();
-  const panelCollapsed = useCoachPanelCollapsed();
+  const mainWidth = useMainWidth();
   const todayKey = useTodayKey();
   const [now, setNow] = useState(() => new Date());
   const [logging, setLogging] = useState(false);
@@ -126,8 +121,7 @@ export function DesktopHome() {
   const todo = todoForToday(schedule.state.events, state.tasks, todayKey);
   const done = doneToday(state, todayKey);
 
-  const panelWidth = panelCollapsed ? COACH_PANEL_COLLAPSED_WIDTH : COACH_PANEL_WIDTH;
-  const contentWidth = Math.min(CONTENT_MAX, width - SIDEBAR_WIDTH - panelWidth - GUTTER * 2);
+  const contentWidth = Math.min(CONTENT_MAX, mainWidth - GUTTER * 2);
   const sideBySide = contentWidth >= SIDE_BY_SIDE_MIN;
   const row = sideBySide ? styles.row : styles.rowStacked;
 

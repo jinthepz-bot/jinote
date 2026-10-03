@@ -4,7 +4,7 @@ import type { CoachScreen } from '../agent/screen';
 import { addDays, daysInMonth, isDayKey, makeDayKey, parseDayKey, startOfWeek } from '../coach/days';
 import { useTodayKey } from '../coach/useTodayKey';
 import { useNotes } from '../notes/store';
-import { useCalendarView } from '../schedule/calendar/viewStore';
+import { THREE_DAYS, useCalendarSpan, useCalendarView } from '../schedule/calendar/viewStore';
 import { ChatScreen } from '../screens/ChatScreen';
 import type { JournalSection } from './Sidebar';
 
@@ -25,6 +25,7 @@ export function CoachPanel({
   onCollapse: () => void;
 }) {
   const { anchor, mode } = useCalendarView();
+  const { threeDay } = useCalendarSpan(mode);
   const { state: notes } = useNotes();
   const todayKey = useTodayKey();
 
@@ -40,6 +41,7 @@ export function CoachPanel({
           to: makeDayKey(p.year, p.month, daysInMonth(p.year, p.month)),
         };
       }
+      if (threeDay) return { screen: 'schedule', mode: '3day', from: anchor, to: addDays(anchor, THREE_DAYS - 1) };
       const from = startOfWeek(anchor);
       return { screen: 'schedule', mode: 'week', from, to: addDays(from, 6) };
     }
@@ -55,7 +57,7 @@ export function CoachPanel({
     }
     if (route === 'Goals') return { screen: 'goals' };
     return { screen: 'today' };
-  }, [route, openNoteId, notes.notes, anchor, mode, journalSection, journalDay, todayKey]);
+  }, [route, openNoteId, notes.notes, anchor, mode, threeDay, journalSection, journalDay, todayKey]);
 
   return <ChatScreen embedded screen={screen} onCollapse={onCollapse} />;
 }

@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useTodayKey } from '../coach/useTodayKey';
@@ -14,7 +15,7 @@ import { kindColors } from '../schedule/calendar/kindColors';
 import { goToDay, toggleFilter, useCalendarView, type CalendarFilters } from '../schedule/calendar/viewStore';
 import { MiniMonth } from './MiniMonth';
 import { SidebarFolders } from './SidebarFolders';
-import { SIDEBAR_WIDTH } from './layout';
+import { SIDEBAR_RAIL_WIDTH, SIDEBAR_WIDTH } from './layout';
 import { useSettings } from './SettingsHost';
 
 export type JournalSection = 'daily' | 'quick' | 'checklist' | 'recipe' | 'buy';
@@ -50,9 +51,12 @@ interface Props {
   journalFolder: string | undefined; // the folder the Journal grid is showing, if any
   openNoteId: string | undefined; // the note open as a page on Journal, if any
   onNavigate: (target: SidebarTarget) => void;
+  // Set when the sidebar is open over the compact layout's icon rail: shows a button
+  // to fold it back.
+  onClose?: () => void;
 }
 
-export function Sidebar({ route, journalSection, journalFolder, openNoteId, onNavigate }: Props) {
+export function Sidebar({ route, journalSection, journalFolder, openNoteId, onNavigate, onClose }: Props) {
   const type = useType();
   const accent = useAccent();
   const { open: openSettings } = useSettings();
@@ -73,10 +77,22 @@ export function Sidebar({ route, journalSection, journalFolder, openNoteId, onNa
       : journalSection;
 
   return (
-    <View style={styles.root}>
-      <Text style={[type.display, styles.logo]} accessibilityRole="header">
-        Jinote
-      </Text>
+    <View style={[styles.root, onClose && styles.rootOverlay]}>
+      <View style={styles.logoRow}>
+        <Text style={[type.display, styles.logo]} accessibilityRole="header">
+          Jinote
+        </Text>
+        {onClose ? (
+          <Pressable
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel="Collapse sidebar"
+            style={(state) => [styles.closeButton, hoverFill(state)]}
+          >
+            <Ionicons name="chevron-back" size={18} color={colors.textMuted} />
+          </Pressable>
+        ) : null}
+      </View>
 
       {/* Visual only for now: no search behind it yet. */}
       <View style={styles.search} accessibilityRole="search">
@@ -143,7 +159,84 @@ export function Sidebar({ route, journalSection, journalFolder, openNoteId, onNa
         {route === 'Schedule' ? <ScheduleTools /> : null}
       </ScrollView>
 
-      <NavLink label="Settings" icon="settings-outline" activeColor={accent.accent} onPress={openSettings} />
+      <NavLink
+        label="Settings"
+        icon="settings-outline"
+        activeColor={accent.accent}
+        onPress={() => {
+          onClose?.();
+          openSettings();
+        }}
+      />
+    </View>
+  );
+}
+
+// The compact layout's sidebar: the four sections and Settings as icons, each named
+// in a tooltip on hover. The "J" at the top opens the full sidebar over the page.
+export function SidebarRail({ route, onNavigate, onExpand }: { route: string; onNavigate: (target: SidebarTarget) => void; onExpand: () => void }) {
+  const type = useType();
+  const accent = useAccent();
+  const { open: openSettings } = useSettings();
+  return (
+    <View style={styles.rail}>
+      <RailButton label="Expand sidebar" onPress={onExpand}>
+        <Text style={[type.display, styles.railLogo]}>J</Text>
+      </RailButton>
+      <View style={styles.railNav}>
+        {NAV.map((item) => {
+          const active = route === item.target.screen;
+          const tint = active ? accent.accent : colors.text;
+          return (
+            <RailButton key={item.label} label={item.label} active={active} onPress={() => onNavigate(item.target)}>
+              <Ionicons name={active ? (item.icon.replace('-outline', '') as IconName) : item.icon} size={20} color={tint} />
+            </RailButton>
+          );
+        })}
+      </View>
+      <View style={styles.flex} />
+      <RailButton label="Settings" onPress={() => openSettings()}>
+        <Ionicons name="settings-outline" size={20} color={colors.text} />
+      </RailButton>
+    </View>
+  );
+}
+
+function RailButton({
+  label,
+  active,
+  onPress,
+  children,
+}: {
+  label: string;
+  active?: boolean;
+  onPress: () => void;
+  children: ReactNode;
+}) {
+  const type = useType();
+  const [hovered, setHovered] = useState(false);
+  return (
+    <View>
+      <Pressable
+        onPress={onPress}
+        onHoverIn={() => setHovered(true)}
+        onHoverOut={() => setHovered(false)}
+        onFocus={() => setHovered(true)}
+        onBlur={() => setHovered(false)}
+        accessibilityRole="link"
+        accessibilityLabel={label}
+        accessibilityState={{ selected: !!active }}
+        style={(state) => [styles.railButton, active && styles.linkActive, hoverFill(state)]}
+      >
+        {children}
+      </Pressable>
+      {hovered ? (
+        <View style={styles.tooltip} pointerEvents="none">
+          <Text style={[type.bodyStrong, styles.tooltipText]} numberOfLines={1}>
+            {label}
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -247,7 +340,42 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     gap: spacing.lg,
   },
+  rootOverlay: {
+    shadowColor: '#000',
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 4, height: 0 },
+    elevation: 8,
+  },
+  logoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   logo: { fontSize: 28, lineHeight: 34, paddingHorizontal: spacing.sm },
+  closeButton: { width: 32, height: 32, borderRadius: radius.control, alignItems: 'center', justifyContent: 'center' },
+  flex: { flex: 1 },
+  // Above the main column, so the tooltips can stick out over it.
+  rail: {
+    width: SIDEBAR_RAIL_WIDTH,
+    zIndex: 10,
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    gap: spacing.lg,
+    backgroundColor: colors.sidebar,
+    borderRightWidth: 1,
+    borderRightColor: colors.border,
+  },
+  railNav: { gap: spacing.xs },
+  railButton: { width: 44, height: 44, borderRadius: radius.control, alignItems: 'center', justifyContent: 'center' },
+  railLogo: { fontSize: 26, lineHeight: 32 },
+  tooltip: {
+    position: 'absolute',
+    left: 44 + spacing.sm,
+    top: 9,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.control,
+    backgroundColor: colors.darkCard,
+    zIndex: 20,
+  },
+  tooltipText: { fontSize: 12, lineHeight: 18, color: colors.isDark ? colors.text : colors.background },
   search: {
     flexDirection: 'row',
     alignItems: 'center',

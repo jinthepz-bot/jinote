@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
   type TextStyle,
 } from 'react-native';
@@ -29,10 +28,7 @@ import { hoverFill, hoverStyles, pointerState } from '../design/hover';
 import { colors, keyboardAppearance, radius, rgba, sizes, spacing } from '../design/theme';
 import { Card } from '../design/ui';
 import {
-  COACH_PANEL_COLLAPSED_WIDTH,
-  COACH_PANEL_WIDTH,
-  SIDEBAR_WIDTH,
-  useCoachPanelCollapsed,
+  useMainWidth,
 } from '../navigation/layout';
 import { useSchedule } from '../schedule/store';
 import { MOODS, moodOf, moodOnDark } from './mood';
@@ -72,8 +68,7 @@ type SaveStatus = 'saving' | 'saved';
 export function DailyJournalPage({ day, onDayChange }: { day?: string; onDayChange: (day: string | undefined) => void }) {
   const type = useType();
   const todayKey = useTodayKey();
-  const { width } = useWindowDimensions();
-  const panelCollapsed = useCoachPanelCollapsed();
+  const mainWidth = useMainWidth();
   const daily = useDaily();
   const coach = useCoach();
   const schedule = useSchedule();
@@ -90,8 +85,7 @@ export function DailyJournalPage({ day, onDayChange }: { day?: string; onDayChan
   const shownStatus: SaveStatus | null = status?.date === date ? status.kind : entry ? 'saved' : null;
   const goTo = (next: string) => onDayChange(next >= todayKey ? undefined : next);
 
-  const panelWidth = panelCollapsed ? COACH_PANEL_COLLAPSED_WIDTH : COACH_PANEL_WIDTH;
-  const contentWidth = Math.min(CONTENT_MAX, width - SIDEBAR_WIDTH - panelWidth - GUTTER * 2);
+  const contentWidth = Math.min(CONTENT_MAX, mainWidth - GUTTER * 2);
   const sideBySide = contentWidth >= SIDE_BY_SIDE_MIN;
 
   return (

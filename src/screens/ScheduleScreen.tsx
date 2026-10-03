@@ -13,6 +13,7 @@ import { AddAction, Card, ScreenTitle, Section } from '../design/ui';
 import { useIsDesktop } from '../navigation/layout';
 import { SettingsButton } from './../navigation/SettingsHost';
 import { DesktopSchedule } from '../schedule/calendar/DesktopSchedule';
+import { itemsOnDay } from '../schedule/calendar/items';
 import { TaskForm } from '../home/TaskForm';
 import { EventForm } from '../schedule/EventForm';
 import { upcomingOccurrences } from '../schedule/occurrences';
@@ -22,8 +23,10 @@ import { UpcomingRow } from '../schedule/UpcomingRow';
 import { WeekGrid } from '../schedule/WeekGrid';
 
 const UPCOMING_LIMIT = 8;
+// The phone has no "Show" checkboxes, so its week shows every kind of item.
+const SHOW_ALL = { events: true, tasks: true, sessions: true, deadlines: true };
 
-// Desktop gets the calendar (see schedule/calendar); the phone screen below is unchanged.
+// Desktop gets the calendar (see schedule/calendar); the phone keeps its lists and week grid.
 export function ScheduleScreen() {
   return useIsDesktop() ? <DesktopSchedule /> : <PhoneSchedule />;
 }
@@ -86,7 +89,13 @@ function PhoneSchedule() {
               </Pressable>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled>
-              <WeekGrid days={weekDays} todayKey={todayKey} events={state.events} onEventPress={setEditingId} />
+              <WeekGrid
+                days={weekDays}
+                todayKey={todayKey}
+                itemsByDay={weekDays.map((day) => itemsOnDay({ events: state.events, coach: coach.state }, day, SHOW_ALL))}
+                onEventPress={setEditingId}
+                onTaskPress={setEditingTaskId}
+              />
             </ScrollView>
           </Card>
         </Section>

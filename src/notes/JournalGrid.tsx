@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
   type TextStyle,
 } from 'react-native';
@@ -21,10 +20,7 @@ import { hoverDim, hoverFill, hoverStyles, pointerState } from '../design/hover'
 import { colors, keyboardAppearance, radius, rgba, sizes, spacing } from '../design/theme';
 import type { IconName } from '../design/ui';
 import {
-  COACH_PANEL_COLLAPSED_WIDTH,
-  COACH_PANEL_WIDTH,
-  SIDEBAR_WIDTH,
-  useCoachPanelCollapsed,
+  useMainWidth,
 } from '../navigation/layout';
 import type { JournalSection } from '../navigation/Sidebar';
 import { coverStyle } from './covers';
@@ -100,8 +96,7 @@ interface Props {
 
 export function JournalGrid({ section, folderId, n, onOpen, onSection, onDaily, onLeaveFolder }: Props) {
   const type = useType();
-  const { width } = useWindowDimensions();
-  const panelCollapsed = useCoachPanelCollapsed();
+  const mainWidth = useMainWidth();
   const { state: notesState, loaded } = useNotes();
   const coach = useCoach();
   const now = useNow();
@@ -159,8 +154,7 @@ export function JournalGrid({ section, folderId, n, onOpen, onSection, onDaily, 
   const recentItems: GridItem[] = [...(showBuy ? [{ kind: 'buy' } as const] : []), ...recent.map((note) => ({ kind: 'note', note }) as const)];
   const pinnedItems: GridItem[] = pinned.map((note) => ({ kind: 'note', note }));
 
-  const panelWidth = panelCollapsed ? COACH_PANEL_COLLAPSED_WIDTH : COACH_PANEL_WIDTH;
-  const contentWidth = Math.min(CONTENT_MAX, width - SIDEBAR_WIDTH - panelWidth - GUTTER * 2);
+  const contentWidth = Math.min(CONTENT_MAX, mainWidth - GUTTER * 2);
   const columns = contentWidth >= THREE_COLUMNS_MIN ? 3 : 2;
   const columnWidth = (contentWidth - COLUMN_GAP * (columns - 1)) / columns;
 

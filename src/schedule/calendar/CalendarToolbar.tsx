@@ -11,16 +11,29 @@ import { ZOOM_LEVELS, type CalendarMode } from './viewStore';
 
 const MENU_WIDTH = 150;
 
-const MODES: { value: CalendarMode; label: string }[] = [
+// What the view switch can show: the saved modes, plus "3 days" while the window is
+// too narrow for a readable week (see useCalendarSpan).
+export type ToolbarView = CalendarMode | '3day';
+
+const MODES: { value: ToolbarView; label: string }[] = [
   { value: 'day', label: 'Day' },
+  { value: 'week', label: 'Week' },
+  { value: 'month', label: 'Month' },
+];
+
+const NARROW_MODES: { value: ToolbarView; label: string }[] = [
+  { value: 'day', label: 'Day' },
+  { value: '3day', label: '3 days' },
   { value: 'week', label: 'Week' },
   { value: 'month', label: 'Month' },
 ];
 
 interface Props {
   title: string; // "September 2026"
-  mode: CalendarMode;
-  onModeChange: (mode: CalendarMode) => void;
+  mode: ToolbarView;
+  onModeChange: (mode: ToolbarView) => void;
+  // A narrow window: offers "3 days" and puts the view switch and zoom on a second row.
+  narrow?: boolean;
   onToday: () => void;
   onPrevious: () => void;
   onNext: () => void;
@@ -43,6 +56,7 @@ export function CalendarToolbar({
   zoom,
   onZoomChange,
   stepLabel,
+  narrow,
 }: Props) {
   const type = useType();
   const accent = useAccent();
@@ -58,106 +72,116 @@ export function CalendarToolbar({
   };
   const closeMenu = () => setMenu(null);
 
-  return (
-    <View style={styles.root}>
-      <Pressable
-        onPress={onToday}
-        accessibilityRole="button"
-        accessibilityLabel="Go to today"
-        style={(state) => [styles.todayButton, hoverFill(state)]}
-      >
-        <Text style={[type.bodyStrong, styles.todayText]}>Today</Text>
-      </Pressable>
-
-      <View style={styles.arrows}>
+  const zoomControls =
+    zoom !== null ? (
+      <View style={styles.zoom}>
+        <ZoomButton icon="remove" label="Zoom out" disabled={zoom <= 0} onPress={() => onZoomChange(zoom - 1)} />
+        <ZoomButton icon="add" label="Zoom in" disabled={zoom >= ZOOM_LEVELS - 1} onPress={() => onZoomChange(zoom + 1)} />
         <Pressable
-          onPress={onPrevious}
+          onPress={() => onZoomChange(0)}
           accessibilityRole="button"
-          accessibilityLabel={`Previous ${stepLabel}`}
-          style={(state) => [styles.arrow, hoverFill(state)]}
+          accessibilityLabel="Fit the whole day"
+          accessibilityState={{ selected: zoom === 0 }}
+          style={(state) => [styles.fitButton, zoom === 0 && styles.fitButtonOn, hoverFill(state)]}
         >
-          <Ionicons name="chevron-back" size={18} color={colors.text} />
-        </Pressable>
-        <Pressable
-          onPress={onNext}
-          accessibilityRole="button"
-          accessibilityLabel={`Next ${stepLabel}`}
-          style={(state) => [styles.arrow, hoverFill(state)]}
-        >
-          <Ionicons name="chevron-forward" size={18} color={colors.text} />
+          <Text style={[type.label, styles.fitText, zoom === 0 && { color: accent.accent }]}>Fit day</Text>
         </Pressable>
       </View>
+    ) : null;
 
-      <Text style={[type.display, styles.title]} numberOfLines={1} accessibilityRole="header">
-        {title}
-      </Text>
+  const modes = (
+    <View style={narrow ? styles.modesNarrow : styles.modes}>
+      <Segmented options={narrow ? NARROW_MODES : MODES} value={mode} onChange={onModeChange} describe={(o) => `${o.label} view`} />
+    </View>
+  );
 
-      {/* Takes the slack, so the title only starts truncating once the row is genuinely full. */}
-      <View style={styles.spacer} />
+  return (
+    <View style={narrow ? styles.stack : undefined}>
+      <View style={styles.root}>
+        <Pressable
+          onPress={onToday}
+          accessibilityRole="button"
+          accessibilityLabel="Go to today"
+          style={(state) => [styles.todayButton, hoverFill(state)]}
+        >
+          <Text style={[type.bodyStrong, styles.todayText]}>Today</Text>
+        </Pressable>
 
-      {zoom !== null ? (
-        <View style={styles.zoom}>
-          <ZoomButton
-            icon="remove"
-            label="Zoom out"
-            disabled={zoom <= 0}
-            onPress={() => onZoomChange(zoom - 1)}
-          />
-          <ZoomButton icon="add" label="Zoom in" disabled={zoom >= ZOOM_LEVELS - 1} onPress={() => onZoomChange(zoom + 1)} />
+        <View style={styles.arrows}>
           <Pressable
-            onPress={() => onZoomChange(0)}
+            onPress={onPrevious}
             accessibilityRole="button"
-            accessibilityLabel="Fit the whole day"
-            accessibilityState={{ selected: zoom === 0 }}
-            style={(state) => [styles.fitButton, zoom === 0 && styles.fitButtonOn, hoverFill(state)]}
+            accessibilityLabel={`Previous ${stepLabel}`}
+            style={(state) => [styles.arrow, hoverFill(state)]}
           >
-            <Text style={[type.label, styles.fitText, zoom === 0 && { color: accent.accent }]}>Fit day</Text>
+            <Ionicons name="chevron-back" size={18} color={colors.text} />
+          </Pressable>
+          <Pressable
+            onPress={onNext}
+            accessibilityRole="button"
+            accessibilityLabel={`Next ${stepLabel}`}
+            style={(state) => [styles.arrow, hoverFill(state)]}
+          >
+            <Ionicons name="chevron-forward" size={18} color={colors.text} />
           </Pressable>
         </View>
+
+        <Text style={[type.display, styles.title]} numberOfLines={1} accessibilityRole="header">
+          {title}
+        </Text>
+
+        {/* Takes the slack, so the title only starts truncating once the row is genuinely full. */}
+        <View style={styles.spacer} />
+
+        {narrow ? null : zoomControls}
+        {narrow ? null : modes}
+
+        <View ref={newButtonRef} collapsable={false}>
+          <Pressable
+            onPress={openMenu}
+            accessibilityRole="button"
+            accessibilityLabel="New"
+            accessibilityState={{ expanded: menu !== null }}
+            style={(state) => [styles.newButton, { backgroundColor: accent.accent }, hoverDim(state)]}
+          >
+            <Ionicons name="add" size={18} color={accent.onAccent} />
+            <Text style={[type.bodyStrong, { color: accent.onAccent }]}>New</Text>
+          </Pressable>
+        </View>
+
+        {/* The menu and its catch-all backdrop live in one modal layer, so a click
+            anywhere else closes it — and nothing below can be clicked through it. */}
+        <Modal visible={menu !== null} transparent animationType="none" onRequestClose={closeMenu}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeMenu} accessibilityLabel="Close menu" />
+          {menu ? (
+            <View style={[styles.menu, { top: menu.top, left: menu.left }]}>
+              <MenuItem
+                icon="calendar-outline"
+                label="Event"
+                onPress={() => {
+                  closeMenu();
+                  onNewEvent();
+                }}
+              />
+              <MenuItem
+                icon="checkbox-outline"
+                label="Task"
+                onPress={() => {
+                  closeMenu();
+                  onNewTask();
+                }}
+              />
+            </View>
+          ) : null}
+        </Modal>
+      </View>
+      {narrow ? (
+        <View style={styles.root}>
+          {modes}
+          <View style={styles.spacer} />
+          {zoomControls}
+        </View>
       ) : null}
-
-      <View style={styles.modes}>
-        <Segmented options={MODES} value={mode} onChange={onModeChange} describe={(o) => `${o.label} view`} />
-      </View>
-
-      <View ref={newButtonRef} collapsable={false}>
-        <Pressable
-          onPress={openMenu}
-          accessibilityRole="button"
-          accessibilityLabel="New"
-          accessibilityState={{ expanded: menu !== null }}
-          style={(state) => [styles.newButton, { backgroundColor: accent.accent }, hoverDim(state)]}
-        >
-          <Ionicons name="add" size={18} color={accent.onAccent} />
-          <Text style={[type.bodyStrong, { color: accent.onAccent }]}>New</Text>
-        </Pressable>
-      </View>
-
-      {/* The menu and its catch-all backdrop live in one modal layer, so a click
-          anywhere else closes it — and nothing below can be clicked through it. */}
-      <Modal visible={menu !== null} transparent animationType="none" onRequestClose={closeMenu}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={closeMenu} accessibilityLabel="Close menu" />
-        {menu ? (
-          <View style={[styles.menu, { top: menu.top, left: menu.left }]}>
-            <MenuItem
-              icon="calendar-outline"
-              label="Event"
-              onPress={() => {
-                closeMenu();
-                onNewEvent();
-              }}
-            />
-            <MenuItem
-              icon="checkbox-outline"
-              label="Task"
-              onPress={() => {
-                closeMenu();
-                onNewTask();
-              }}
-            />
-          </View>
-        ) : null}
-      </Modal>
     </View>
   );
 }
@@ -230,6 +254,8 @@ const styles = StyleSheet.create({
   title: { flexShrink: 1, fontSize: 22, lineHeight: 28 },
   spacer: { flex: 1, minWidth: spacing.sm },
   modes: { width: 168 },
+  modesNarrow: { width: 240 },
+  stack: { gap: spacing.sm },
   newButton: {
     height: sizes.controlSm,
     paddingHorizontal: spacing.md,
