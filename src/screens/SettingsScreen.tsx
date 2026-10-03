@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { resetCoachData } from '../coach/store';
 import { applyBackup, currentCounts, describeCounts, parseBackup, type BackupCounts } from '../data/backup';
-import { exportBackup, readBackupFile } from '../data/backupFile';
+import { exportBackup, readBackupFile, restoreBackupPhotos } from '../data/backupFile';
 import { hoverFill } from '../design/hover';
 import { useAccent, useAccentChooser } from '../design/accent';
 import { confirmDestructive } from '../design/confirm';
@@ -289,8 +289,9 @@ function DataSection() {
       title: 'Replace everything with this backup?',
       message: `${read.name}\n\nThis replaces your goals, tasks, journal and schedule on this device with:\n${describeCounts(parsed.counts)}`,
       confirmLabel: 'Replace',
-      onConfirm: () => {
+      onConfirm: async () => {
         applyBackup(parsed.backup);
+        await restoreBackupPhotos(parsed.backup);
         setStatus({ tone: 'ok', text: `Imported ${describeCounts(parsed.counts)}` });
       },
     });
@@ -352,7 +353,8 @@ function DataSection() {
         ) : null}
 
         <Text style={[type.mono, styles.footnote]}>
-          Recipe photos stay on this device — a backup records that a photo was attached, not the image itself.
+          Recipe photos are included in the backup, shrunk to about 200 KB each, and sync with the rest when you're
+          signed in.
         </Text>
 
         <View style={styles.resetRow}>

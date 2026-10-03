@@ -7,13 +7,33 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 
-import { backupFileName, buildBackup } from './backup';
+import { bytesToBase64, base64ToBytes, photoIdOf, readPhoto, writePhoto } from '../notes/photos';
+import { getNotesState } from '../notes/store';
+import { backupFileName, buildBackup, type Backup } from './backup';
 
 export type ExportResult = { ok: true; where: string } | { ok: false; error: string };
 export type ImportRead = { ok: true; text: string; name: string } | { ok: false; error: string; canceled?: boolean };
 
-function serialize(): string {
-  return JSON.stringify(buildBackup(), null, 2);
+// The backup plus every recipe photo a note uses, so a restore brings the images back.
+async function serialize(): Promise<string> {
+  const backup = buildBackup();
+  const photos: Record<string, string> = {};
+  for (const note of getNotesState().notes) {
+    const id = note.type === 'recipe' ? photoIdOf(note.photoUri) : null;
+    if (!id || photos[id]) continue;
+    const bytes = await readPhoto(id);
+    if (bytes) photos[id] = bytesToBase64(bytes);
+  }
+  if (Object.keys(photos).length > 0) backup.data.photos = photos;
+  return JSON.stringify(backup, null, 2);
+}
+
+// After applyBackup: puts the backup's photos on this device (and, when signed in,
+// the next sync uploads them).
+export async function restoreBackupPhotos(backup: Backup): Promise<void> {
+  for (const [id, data] of Object.entries(backup.data.photos ?? {})) {
+    await writePhoto(id, base64ToBytes(data));
+  }
 }
 
 function downloadOnWeb(json: string, name: string): ExportResult {
@@ -36,7 +56,7 @@ function downloadOnWeb(json: string, name: string): ExportResult {
 
 export async function exportBackup(): Promise<ExportResult> {
   const name = backupFileName();
-  const json = serialize();
+  const json = await serialize();
 
   if (Platform.OS === 'web') return downloadOnWeb(json, name);
 

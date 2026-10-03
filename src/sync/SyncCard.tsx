@@ -6,7 +6,7 @@ import { useType } from '../design/fonts';
 import { Sheet } from '../design/Sheet';
 import { colors, keyboardAppearance, spacing } from '../design/theme';
 import { Button, Card, fieldStyles, Section } from '../design/ui';
-import { googleSignInAvailable, sendEmailCode, signInWithGoogle, signOut, verifyEmailCode } from './auth';
+import { googleSignInAvailable, sendEmailLink, signInWithGoogle, signOut } from './auth';
 import { syncConfigured } from './client';
 import { syncNow } from './engine';
 import { SYNC_ICONS, syncLabel, useSyncStatus, type SyncStatus } from './status';
@@ -107,43 +107,37 @@ export function SyncSection() {
   );
 }
 
-// Email → a 6-digit code → signed in.
+// Email → a sign-in link → back to this page, signed in. The link may open in a new
+// tab; this one notices the sign-in too and closes the sheet.
 function EmailSignInSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const type = useType();
+  const status = useSyncStatus();
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const close = () => {
-    setCode('');
     setSentTo(null);
     setError(null);
     setBusy(false);
     onClose();
   };
 
+  useEffect(() => {
+    if (visible && status.email) close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, status.email]);
+
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  const validCode = /^\d{6,10}$/.test(code.trim());
 
   const send = async () => {
     if (!validEmail || busy) return;
     setBusy(true);
     setError(null);
-    const result = await sendEmailCode(email);
+    const result = await sendEmailLink(email);
     setBusy(false);
     if (result.ok) setSentTo(email.trim());
-    else setError(result.error);
-  };
-
-  const verify = async () => {
-    if (!sentTo || !validCode || busy) return;
-    setBusy(true);
-    setError(null);
-    const result = await verifyEmailCode(sentTo, code);
-    setBusy(false);
-    if (result.ok) close();
     else setError(result.error);
   };
 
@@ -152,7 +146,7 @@ function EmailSignInSheet({ visible, onClose }: { visible: boolean; onClose: () 
       <Text style={[type.display, styles.sheetTitle]}>Sign in with email</Text>
       {sentTo === null ? (
         <>
-          <Text style={[type.body, styles.muted]}>We'll email you a 6-digit code. No password needed.</Text>
+          <Text style={[type.body, styles.muted]}>We'll email you a sign-in link. No password needed.</Text>
           <TextInput
             style={[fieldStyles.input, fieldStyles.single, type.body]}
             value={email}
@@ -169,36 +163,23 @@ function EmailSignInSheet({ visible, onClose }: { visible: boolean; onClose: () 
             accessibilityLabel="Email address"
           />
           <View style={styles.buttons}>
-            <Button label={busy ? 'Sending…' : 'Email me a code'} onPress={send} disabled={!validEmail || busy} />
+            <Button label={busy ? 'Sending…' : 'Email me a link'} onPress={send} disabled={!validEmail || busy} />
             <Button label="Cancel" variant="secondary" onPress={close} />
           </View>
         </>
       ) : (
         <>
-          <Text style={[type.body, styles.muted]}>Enter the code we sent to {sentTo}.</Text>
-          <TextInput
-            style={[fieldStyles.input, fieldStyles.single, type.mono, styles.code]}
-            value={code}
-            onChangeText={(t) => setCode(t.replace(/\D/g, ''))}
-            placeholder="123456"
-            placeholderTextColor={colors.textMuted}
-            keyboardType="number-pad"
-            autoComplete="one-time-code"
-            textContentType="oneTimeCode"
-            maxLength={10}
-            autoFocus
-            keyboardAppearance={keyboardAppearance}
-            onSubmitEditing={verify}
-            accessibilityLabel="Sign-in code"
-          />
+          <Text style={type.bodyStrong}>Check your email and click the link</Text>
+          <Text style={[type.body, styles.muted]}>
+            We sent it to {sentTo}. Open it in this browser and it brings you back here, signed in.
+          </Text>
           <View style={styles.buttons}>
-            <Button label={busy ? 'Signing in…' : 'Sign in'} onPress={verify} disabled={!validCode || busy} />
+            <Button label="Done" onPress={close} />
             <Button
               label="Use another email"
               variant="secondary"
               onPress={() => {
                 setSentTo(null);
-                setCode('');
                 setError(null);
               }}
             />
@@ -218,5 +199,4 @@ const styles = StyleSheet.create({
   buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   footnote: { fontSize: 11, color: colors.textMuted },
   sheetTitle: { fontSize: 24, lineHeight: 30 },
-  code: { fontSize: 22, letterSpacing: 6, textAlign: 'center' },
 });

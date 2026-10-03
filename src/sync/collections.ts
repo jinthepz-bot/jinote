@@ -2,9 +2,8 @@
 // (a goal, a set, a note, a Daily journal day…) in supabase/schema.sql's sync_items,
 // keyed by (collection, item id). Settings are one row per settings store.
 //
-// Stays on each device: the calendar's view and zoom, whether the coach panel is
-// open, and recipe photos themselves (a note keeps its photo's path, which only
-// means something on the phone that took it).
+// Stays on each device: the calendar's view and zoom, and whether the coach panel is
+// open. Recipe photos travel separately, as files (see sync/photos.ts).
 import { withRecomputedGoals, type CoachState, type Goal } from '../coach/store';
 import { chatStore } from '../storage';
 import type { AppMessage } from '../types';

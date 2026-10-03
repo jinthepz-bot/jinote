@@ -1,7 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -27,6 +26,7 @@ import { coverStyle } from './covers';
 import { editedShort, noteTitle, splitQuickNote } from './format';
 import { previewText } from './lines';
 import { NoteForm } from './NoteForm';
+import { NotePhoto } from './NotePhoto';
 import {
   hasTag,
   matchesQuery,
@@ -388,7 +388,7 @@ function NoteCard({ note, now, onOpen }: { note: Note; now: number; onOpen: () =
     <CardShell label={`Open ${TYPE_LABELS[note.type].toLowerCase()} "${title}"`} onPress={onOpen} hover={hover}>
       {note.cover ? <View style={[styles.coverStrip, coverStyle(note.cover)]} /> : null}
       {note.type === 'recipe' && note.photoUri ? (
-        <Image source={{ uri: note.photoUri }} style={styles.photo} resizeMode="cover" accessibilityIgnoresInvertColors />
+        <NotePhoto uri={note.photoUri} style={styles.photo} />
       ) : null}
       <View style={styles.cardBody}>
         <Text style={type.label}>{TYPE_LABELS[note.type]}</Text>

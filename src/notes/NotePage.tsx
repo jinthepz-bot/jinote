@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextStyle } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextStyle } from 'react-native';
 
 import { useAccent } from '../design/accent';
 import { confirmDestructive } from '../design/confirm';
@@ -12,6 +12,7 @@ import { Button, Checkbox, IconButton, RowIconButton } from '../design/ui';
 import { COVERS, coverStyle } from './covers';
 import { editedAgo, joinQuickNote, noteTitle, SECTION_LABELS, splitQuickNote } from './format';
 import { LineEditor, type LineEditorHandle } from './LineEditor';
+import { NotePhoto } from './NotePhoto';
 import { deleteNotePhoto } from './photos';
 import {
   addChecklistItem,
@@ -489,7 +490,7 @@ function RecipeBody({ note }: { note: RecipeNote }) {
         </Text>
       </View>
 
-      {note.photoUri ? <Image source={{ uri: note.photoUri }} style={styles.photo} resizeMode="cover" /> : null}
+      {note.photoUri ? <NotePhoto uri={note.photoUri} style={styles.photo} /> : null}
 
       {note.ingredients.length > 0 ? (
         <View style={styles.section}>

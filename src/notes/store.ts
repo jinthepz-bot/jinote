@@ -41,7 +41,7 @@ export interface RecipeNote {
   id: string;
   type: 'recipe';
   title: string;
-  photoUri: string | null; // local file:// path from expo-file-system; never image bytes
+  photoUri: string | null; // "photo:<id>" (see notes/photos.ts), or an older note's file:// path; never image bytes
   cookTime: string;
   category: RecipeCategory;
   rating: 1 | 2 | 3;

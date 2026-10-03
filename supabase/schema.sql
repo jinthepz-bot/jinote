@@ -116,3 +116,36 @@ revoke all on function public.push_items(jsonb) from public, anon;
 revoke all on function public.prune_chat(integer) from public, anon;
 grant execute on function public.push_items(jsonb) to authenticated;
 grant execute on function public.prune_chat(integer) to authenticated;
+
+-- ---------------------------------------------------------------------------------
+-- Recipe photos: a private Storage bucket. Each photo is <user id>/<photo id>.jpg,
+-- shrunk to about 200 KB by the app before upload. Signed-in users can only read,
+-- add, replace and remove files in their own folder.
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('note-photos', 'note-photos', false, 1048576, array['image/jpeg'])
+on conflict (id) do update
+  set public = false,
+      file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "Read own photos" on storage.objects;
+create policy "Read own photos" on storage.objects
+  for select to authenticated
+  using (bucket_id = 'note-photos' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+drop policy if exists "Add own photos" on storage.objects;
+create policy "Add own photos" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'note-photos' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+drop policy if exists "Replace own photos" on storage.objects;
+create policy "Replace own photos" on storage.objects
+  for update to authenticated
+  using (bucket_id = 'note-photos' and (storage.foldername(name))[1] = (select auth.uid())::text)
+  with check (bucket_id = 'note-photos' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+drop policy if exists "Remove own photos" on storage.objects;
+create policy "Remove own photos" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'note-photos' and (storage.foldername(name))[1] = (select auth.uid())::text);

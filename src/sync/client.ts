@@ -32,8 +32,8 @@ export const supabase: SupabaseClient | null = syncConfigured
 const returnParams: URLSearchParams | null =
   Platform.OS === 'web' && typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
 
-// Coming back from Google: swaps the one-time code for a session and tidies the
-// address bar. Resolves to an error message if Google or Supabase refused.
+// Coming back from Google or an email sign-in link: swaps the one-time code for a
+// session and tidies the address bar. Resolves to an error message if it failed.
 export async function finishRedirectSignIn(): Promise<string | null> {
   if (!supabase || !returnParams) return null;
   const code = returnParams.get('code');
@@ -44,7 +44,13 @@ export async function finishRedirectSignIn(): Promise<string | null> {
   window.history.replaceState(window.history.state, '', clean.toString());
   if (failure) return failure;
   const { error } = await supabase.auth.exchangeCodeForSession(code!);
-  return error ? error.message : null;
+  if (!error) return null;
+  // The other half of the secret is kept by the browser the sign-in started in, so a
+  // link opened anywhere else (Safari, from an iPhone home-screen app) can't finish.
+  if (/code verifier/i.test(error.message)) {
+    return 'That link was opened in a different browser from the one you started in. Start again here and open the link in this browser.';
+  }
+  return error.message;
 }
 
 // On a phone build the session refresh timer should only run while the app is in

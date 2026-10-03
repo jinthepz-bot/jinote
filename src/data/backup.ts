@@ -26,6 +26,9 @@ export interface Backup {
     profile: unknown;
     calendar: unknown;
     daily?: unknown; // absent in backups made before the Daily journal
+    // Recipe photos, by photo id: the shrunk JPEG as base64. Added by exportBackup
+    // (see backupFile.ts), since reading them is asynchronous; absent in older backups.
+    photos?: Record<string, string>;
   };
 }
 
@@ -85,6 +88,16 @@ export function backupFileName(now: Date = new Date()): string {
   return `jinote-backup-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.json`;
 }
 
+// Only id → base64 text pairs survive; anything else in a hand-edited file is dropped.
+function validPhotos(raw: unknown): Record<string, string> | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const out: Record<string, string> = {};
+  for (const [id, data] of Object.entries(raw)) {
+    if (/^[a-z0-9]{6,40}$/.test(id) && typeof data === 'string' && /^[A-Za-z0-9+/=]+$/.test(data)) out[id] = data;
+  }
+  return out;
+}
+
 export type ParseResult = { ok: true; backup: Backup; counts: BackupCounts } | { ok: false; error: string };
 
 // Reads a file the user picked. It might be any JSON at all — or not JSON — so this
@@ -124,6 +137,7 @@ export function parseBackup(text: string): ParseResult {
       profile: data.profile, // absent in backups made before the name existed
       calendar: data.calendar,
       daily: data.daily,
+      photos: validPhotos(data.photos),
     },
   };
 

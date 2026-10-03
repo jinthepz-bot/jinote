@@ -5,6 +5,7 @@ import { AppState, Platform } from 'react-native';
 import { registeredStore, type PersistedStore } from '../storage/persistedStore';
 import { CHAT_SYNC_LIMIT, partFor, SOURCES, type Collection, type Part, type Source } from './collections';
 import { finishRedirectSignIn, supabase } from './client';
+import { syncPhotos } from './photos';
 import { getSyncStatus, setSyncStatus } from './status';
 
 // Offline-first sync. The stores stay the source of truth on each device; this keeps
@@ -37,6 +38,7 @@ interface Meta {
   userId: string | null; // the account these marks were synced with
   cursor: string | null; // the newest cloud change already downloaded
   items: Partial<Record<Collection, Record<string, Mark>>>;
+  photos: Record<string, 1>; // recipe photos known to be online (see sync/photos.ts)
 }
 
 interface Row {
@@ -48,7 +50,7 @@ interface Row {
   updated_at: string;
 }
 
-let meta: Meta = { userId: null, cursor: null, items: {} };
+let meta: Meta = { userId: null, cursor: null, items: {}, photos: {} };
 let userId: string | null = null;
 let started = false;
 
@@ -102,6 +104,7 @@ async function loadMeta() {
       userId: typeof parsed.userId === 'string' ? parsed.userId : null,
       cursor: typeof parsed.cursor === 'string' ? parsed.cursor : null,
       items: typeof parsed.items === 'object' && parsed.items !== null ? parsed.items : {},
+      photos: typeof parsed.photos === 'object' && parsed.photos !== null ? parsed.photos : {},
     };
   } catch (err) {
     console.warn('Failed to load sync state', err);
@@ -368,6 +371,8 @@ export async function syncNow(): Promise<void> {
     await push();
     await pull();
     if (getSyncStatus().pending > 0) await push();
+    await syncPhotos(supabase, userId, meta.photos);
+    saveMetaSoon();
     setSyncStatus({ phase: 'synced', lastSyncedAt: Date.now(), message: null });
   } catch (err) {
     setSyncStatus(isOffline(err) ? { phase: 'offline', message: null } : { phase: 'error', message: describe(err) });
@@ -396,6 +401,7 @@ function onSession(session: Session | null) {
   if (meta.userId !== id) {
     for (const marks of Object.values(meta.items)) for (const mark of Object.values(marks ?? {})) mark.s = 0;
     meta.cursor = null;
+    meta.photos = {};
     meta.userId = id;
     saveMetaSoon();
   }
@@ -407,7 +413,7 @@ function onSession(session: Session | null) {
 // what it synced, and what's left counts as older than anything in the cloud, so
 // signing in again brings the cloud copy back rather than the empty one.
 export function forgetSyncState() {
-  meta = { userId: null, cursor: null, items: {} };
+  meta = { userId: null, cursor: null, items: {}, photos: {} };
   scan(SOURCES, 'oldest');
   saveMetaSoon();
 }

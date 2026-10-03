@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAccent } from '../design/accent';
 import { confirmDestructive } from '../design/confirm';
@@ -7,6 +7,7 @@ import { useType } from '../design/fonts';
 import { hoverDim, hoverFill } from '../design/hover';
 import { colors, radius, spacing } from '../design/theme';
 import { Card, IconButton } from '../design/ui';
+import { NotePhoto } from './NotePhoto';
 import { deleteNotePhoto } from './photos';
 import { deleteNote, type RecipeNote } from './store';
 
@@ -44,7 +45,7 @@ export function RecipeCard({ note, onOpen }: { note: RecipeNote; onOpen?: () => 
       <View style={styles.imageWrap}>
         {link(
           note.photoUri ? (
-            <Image source={{ uri: note.photoUri }} style={styles.photo} resizeMode="cover" />
+            <NotePhoto uri={note.photoUri} style={styles.photo} />
           ) : (
             <View style={styles.placeholder}>
               <Text style={[type.label, { color: accent.accent, letterSpacing: 1 }]}>NO PHOTO</Text>

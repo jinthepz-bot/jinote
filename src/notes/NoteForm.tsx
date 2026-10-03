@@ -1,12 +1,13 @@
 import { useState, type ReactNode } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useType } from '../design/fonts';
 import { Sheet } from '../design/Sheet';
 import { colors, radius, sizes, spacing, keyboardAppearance } from '../design/theme';
 import { useAccent } from '../design/accent';
 import { Button, Chip, fieldStyles, Segmented } from '../design/ui';
-import { pickPhotoFromCamera, pickPhotoFromLibrary, photosSupported } from './photos';
+import { NotePhoto } from './NotePhoto';
+import { cameraButtonAvailable, deleteNotePhoto, pickPhotoFromCamera, pickPhotoFromLibrary, photosSupported } from './photos';
 import {
   addChecklist,
   addQuickNote,
@@ -56,6 +57,7 @@ function PhotoField({ uri, onChange }: { uri: string | null; onChange: (uri: str
   const type = useType();
   const accent = useAccent();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!photosSupported) {
     return (
@@ -72,14 +74,20 @@ function PhotoField({ uri, onChange }: { uri: string | null; onChange: (uri: str
     const result = source === 'camera' ? await pickPhotoFromCamera() : await pickPhotoFromLibrary();
     setBusy(false);
     if ('uri' in result) onChange(result.uri);
+    else if ('error' in result) setError(result.error);
   };
 
   return (
     <Field label="Photo (optional)">
       {uri ? (
         <View style={styles.photoRow}>
-          <Image source={{ uri }} style={styles.photoPreview} resizeMode="cover" />
-          <Pressable onPress={() => onChange(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Remove photo">
+          <NotePhoto uri={uri} style={styles.photoPreview} />
+          <Pressable
+            onPress={() => {
+              deleteNotePhoto(uri);
+              onChange(null);
+            }}
+            hitSlop={8} accessibilityRole="button" accessibilityLabel="Remove photo">
             <Text style={[type.label, styles.removeText]}>Remove</Text>
           </Pressable>
         </View>
@@ -87,10 +95,17 @@ function PhotoField({ uri, onChange }: { uri: string | null; onChange: (uri: str
         <ActivityIndicator color={accent.accent} />
       ) : (
         <View style={styles.photoButtons}>
-          <Button label="Camera" variant="secondary" small onPress={() => pick('camera')} />
-          <Button label="Library" variant="secondary" small onPress={() => pick('library')} />
+          {cameraButtonAvailable ? (
+            <>
+              <Button label="Camera" variant="secondary" small onPress={() => pick('camera')} />
+              <Button label="Library" variant="secondary" small onPress={() => pick('library')} />
+            </>
+          ) : (
+            <Button label="Choose photo" variant="secondary" small onPress={() => pick('library')} />
+          )}
         </View>
       )}
+      {error ? <Text style={[type.mono, styles.muted]}>{error}</Text> : null}
     </Field>
   );
 }

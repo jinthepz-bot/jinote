@@ -166,7 +166,8 @@ Sign in once per device (Google in the browser, or a 6-digit email code anywhere
 
 - **Offline-first.** Each device keeps everything locally and works fully offline; changes upload about 2 seconds after they happen, and other devices' changes download when the app starts, comes back to the front, reconnects, and every minute while open. Status (Synced / Syncing / Offline) is in Settings → Sync and above Settings in the sidebar.
 - **Merging.** One row per item (goal, set, task, to-buy item, event with its one-day changes, note with its checklist/recipe/tags/pin/folder, folder, Daily journal day, chat message, settings group). The newest edit of an item wins, and the database refuses an older edit over a newer one. Deletions travel as small "deleted" markers. On a device's first sign-in its data is merged in, nothing is dropped; for data from before sync existed, where the same item differs and neither copy has a newer edit time, the copy already in the cloud wins — so sign in first on the device with your main data.
-- **What stays on each device:** the calendar's view and zoom, whether the coach panel is open, and recipe photo files. The chat syncs its newest 200 messages.
+- **Recipe photos** are shrunk to about 200 KB when picked, kept on the device, and uploaded to a private Storage bucket (`note-photos`, one folder per user). Deleting the recipe, or removing its photo, deletes the online copy on the next sync. Backups include them.
+- **What stays on each device:** the calendar's view and zoom, and whether the coach panel is open. The chat syncs its newest 200 messages.
 - **Security.** Row Level Security limits every row to its owner (see [supabase/schema.sql](supabase/schema.sql)). The app only holds the project URL and the *publishable* key, which are public by design; never use the secret key.
 
 **Setup:** create a Supabase project, run `supabase/schema.sql` in its SQL Editor, enable Email (with `{{ .Token }}` in the Magic Link and Confirm signup templates) and Google sign-in, then put these in `.env` (and, for the deployed site, as GitHub Actions repository secrets of the same names) and restart Expo with `-c`, since Metro caches inlined env values:
@@ -198,7 +199,7 @@ npm run serve:web   # serves that same dist/ folder locally, for a final check b
 **What's disabled on web, and how:**
 
 - **Notifications** — `notificationsSupported` in [notifications/scheduler.ts](src/notifications/scheduler.ts) is `false` on web (iOS PWAs don't support the Notifications API the way native apps do), and Settings shows a plain explanation instead of toggles that would do nothing.
-- **Recipe photos** — `photosSupported` in [notes/photos.ts](src/notes/photos.ts) is `false` on web, and the photo field explains why instead of failing silently when the camera/library pickers don't work.
+- **Recipe photos** — work on web too: one "Choose photo" button (the browser's picker, which on a phone also offers the camera); the image is shrunk to about 200 KB and kept in IndexedDB.
 
 Both flags already existed from earlier stages (they originally covered the Expo dev preview); the messaging was reworded from "in this preview" to "on web" now that this is a real deployed destination, not a temporary preview.
 
