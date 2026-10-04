@@ -3,7 +3,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { addDays, dayKey, daysBetween, formatDayKey, formatTime, isDayKey } from '../coach/days';
 import { formatAmount, roundAmount } from '../coach/format';
 import { goalProgress } from '../coach/stats';
-import { dayTotal, GOAL_TYPE_LABELS, goalValue, setsOn } from '../coach/progress';
+import { dayTotal, GOAL_TYPE_LABELS, goalValue, recordSet, setsOn } from '../coach/progress';
 import {
   addBuyItem,
   addTask,
@@ -44,6 +44,7 @@ const TIME_FORMAT = '24-hour "HH:MM", e.g. "10:15".';
 const MAX_NOTE_RESULTS = 20;
 const MAX_SCHEDULE_RESULTS = 20;
 const MAX_JOURNAL_DAYS = 31;
+const MAX_SET_RESULTS = 30;
 const MAX_JOURNAL_ANSWER_CHARS = 300;
 
 // A single line might be a natural comma-separated list ("flour, eggs, milk"),
@@ -123,18 +124,38 @@ export const COACH_TOOL_SPECS: ToolSpec[] = [
   },
   {
     name: 'edit_set',
-    description: "Change the size of one set logged today (\"that last set was 25, not 20\"). Set ids are in CURRENT STATE.",
+    description:
+      'Change the size of one logged set, from today or any earlier day ("that last set was 25, not 20", "the 90 on ' +
+      'Monday was really 30"). Today\'s set ids and each record\'s set id are in CURRENT STATE; find other past sets ' +
+      'with find_sets. A record is recalculated from the sets afterwards.',
     properties: {
-      set_id: { type: 'string', description: 'Exact set id from CURRENT STATE.' },
+      set_id: { type: 'string', description: 'Exact set id from CURRENT STATE or find_sets.' },
       value: { type: 'number', description: 'The correct size of that one set.' },
     },
     required: ['set_id', 'value'],
   },
   {
     name: 'delete_set',
-    description: 'Delete one logged set (logged by mistake). Set ids are in CURRENT STATE.',
-    properties: { set_id: { type: 'string', description: 'Exact set id from CURRENT STATE.' } },
+    description:
+      'Delete one logged set, from today or any earlier day (logged by mistake: "delete the 90 set"). Today\'s set ids ' +
+      "and each record's set id are in CURRENT STATE; find other past sets with find_sets. If more than one set " +
+      'matches what the user said, ask which one (give the day and time of each) instead of guessing. A record is ' +
+      'recalculated from the remaining sets.',
+    properties: { set_id: { type: 'string', description: 'Exact set id from CURRENT STATE or find_sets.' } },
     required: ['set_id'],
+  },
+  {
+    name: 'find_sets',
+    description:
+      "Look up a goal's logged sets on any day, newest first, with their ids — to fix or delete a past set. Filter by " +
+      `size and/or a date range. At most ${MAX_SET_RESULTS} sets. Changes nothing.`,
+    properties: {
+      goal_id: { type: 'string', description: 'Exact goal id from CURRENT STATE.' },
+      value: { type: 'number', description: 'Optional: only sets of exactly this size.' },
+      from: { type: 'string', description: `Optional: first day. ${DAY_FORMAT}` },
+      to: { type: 'string', description: `Optional: last day, inclusive. ${DAY_FORMAT}` },
+    },
+    required: ['goal_id'],
   },
   {
     name: 'create_goal',
@@ -504,7 +525,17 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
       const entry = typeof input.set_id === 'string' ? getCoachState().entries.find((e) => e.id === input.set_id) : undefined;
       if (!entry) return fail(`No logged set has id "${String(input.set_id)}". Use a set id from CURRENT STATE.`);
       const goal = getCoachState().goals.find((g) => g.id === entry.goalId)!;
-      const when = entry.loggedAt > 0 ? ` at ${formatTime(entry.loggedAt)}` : '';
+      const today = dayKey();
+      const at = entry.loggedAt > 0 ? ` at ${formatTime(entry.loggedAt)}` : '';
+      const when = entry.date === today ? at : ` on ${formatDayKey(entry.date, today)}${at}`;
+      // What the change did to the goal: the record for a record goal, else that day's total.
+      const after = () => {
+        const updated = getCoachState().goals.find((g) => g.id === goal.id)!;
+        if (updated.type === 'best') return `record ${formatAmount(updated.current)}`;
+        if (updated.type === 'cumulative') return `total ${formatAmount(updated.current)}`;
+        const day = dayTotal(setsOn(getCoachState(), goal.id, entry.date));
+        return `${entry.date === today ? 'today' : formatDayKey(entry.date, today)} ${formatAmount(day)}`;
+      };
       if (name === 'edit_set') {
         const value = positiveNumber(input.value);
         if (value === null) return fail('value must be a positive number.');
@@ -517,7 +548,7 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
             kind: 'set_edited',
             label: `Changed a set of "${goal.title}" from ${formatAmount(entry.value)} to ${formatAmount(value)}`,
             area: 'Goal',
-            detail: `Set${when} ${formatAmount(entry.value)} → ${formatAmount(value)} · ${goal.title} · today ${formatAmount(now.today_total)}`,
+            detail: `Set${when} ${formatAmount(entry.value)} → ${formatAmount(value)} · ${goal.title} · ${after()}`,
             undo: { kind: 'restoreSet', entry: done.before, previousCurrent: done.previousCurrent },
           },
         );
@@ -531,10 +562,41 @@ export function executeCoachTool(name: string, rawInput: unknown): ToolRun {
           kind: 'set_deleted',
           label: `Deleted a set of ${formatAmount(entry.value)} from "${goal.title}"`,
           area: 'Goal',
-          detail: `Deleted set${when} of ${formatAmount(entry.value)} · ${goal.title} · today ${formatAmount(now.today_total)}`,
+          detail: `Deleted set${when} of ${formatAmount(entry.value)} · ${goal.title} · ${after()}`,
           undo: { kind: 'restoreSet', entry: done.before, previousCurrent: done.previousCurrent },
         },
       );
+    }
+
+    case 'find_sets': {
+      const goal = findGoal(input.goal_id);
+      if ('content' in goal) return goal;
+      const value = input.value === undefined || input.value === null ? null : positiveNumber(input.value);
+      if (input.value !== undefined && input.value !== null && value === null) return fail('value must be a positive number.');
+      const from = text(input.from);
+      const to = text(input.to);
+      if ((from && !isDayKey(from)) || (to && !isDayKey(to))) return fail(`from and to must be dates. ${DAY_FORMAT}`);
+      const state = getCoachState();
+      const today = dayKey();
+      const record = recordSet(goal, state);
+      const matches = state.entries
+        .filter((e) => e.goalId === goal.id)
+        .filter((e) => value === null || e.value === value)
+        .filter((e) => (!from || e.date >= from) && (!to || e.date <= to))
+        .sort((a, b) => (a.date === b.date ? b.loggedAt - a.loggedAt : a.date < b.date ? 1 : -1));
+      return ok({
+        goal: goal.title,
+        count: matches.length,
+        sets: matches.slice(0, MAX_SET_RESULTS).map((e) => ({
+          id: e.id,
+          date: e.date,
+          day: formatDayKey(e.date, today),
+          time: e.loggedAt > 0 ? formatTime(e.loggedAt) : null,
+          value: e.value,
+          ...(e.note ? { note: e.note } : {}),
+          ...(record?.id === e.id ? { holds_record: true } : {}),
+        })),
+      });
     }
 
     case 'create_goal': {

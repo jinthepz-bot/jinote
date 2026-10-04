@@ -26,6 +26,7 @@ import { ActivityHeatmap } from '../goals/ActivityHeatmap';
 import { GoalCard } from '../goals/GoalCard';
 import { GoalForm } from '../goals/GoalForm';
 import { LogProgressSheet } from '../goals/LogProgressSheet';
+import { SetHistory } from '../goals/SetHistory';
 import { DeadlinePicker } from '../home/DeadlinePicker';
 
 export function GoalsScreen() {
@@ -93,6 +94,11 @@ export function GoalsScreen() {
               others.map(cardFor)
             )}
             <AddAction label="New goal" onPress={() => setCreating(true)} />
+          </Section>
+
+          {/* Every logged set, to fix or delete one — a mistaken 90 lifts the record. */}
+          <Section label="History">
+            <SetHistory state={state} todayKey={todayKey} />
           </Section>
 
         </ScrollView>

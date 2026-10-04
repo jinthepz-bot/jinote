@@ -10,10 +10,15 @@ import type { IconName } from './ui';
 export interface PopoverAnchor {
   top: number;
   left: number;
+  // Where the thing it opens from starts, if it opens below something: with no room
+  // underneath, the popover opens above it instead.
+  above?: number;
 }
 
 // A small menu in a modal layer at a point on screen: under a button, or where a
-// right-click landed. A click anywhere else closes it. Kept inside the window.
+// right-click landed. A click anywhere else closes it. Kept inside the window: it
+// measures itself, and flips above its button (or moves up) rather than run off the
+// bottom of the screen.
 export function Popover({
   anchor,
   width,
@@ -26,12 +31,24 @@ export function Popover({
   children: ReactNode;
 }) {
   const window = useWindowDimensions();
+  const [height, setHeight] = useState<number | null>(null);
   if (!anchor) return null;
   const left = Math.max(spacing.sm, Math.min(anchor.left, window.width - width - spacing.sm));
+  let top = anchor.top;
+  if (height !== null && top + height > window.height - spacing.sm) {
+    top =
+      anchor.above !== undefined && anchor.above - 4 - height >= spacing.sm
+        ? anchor.above - 4 - height
+        : Math.max(spacing.sm, window.height - height - spacing.sm);
+  }
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close menu" />
-      <View style={[styles.menu, { top: anchor.top, left, width }]} accessibilityRole="menu">
+      <View
+        style={[styles.menu, { top, left, width }, height === null && styles.measuring]}
+        onLayout={(e) => setHeight(e.nativeEvent.layout.height)}
+        accessibilityRole="menu"
+      >
         {children}
       </View>
     </Modal>
@@ -44,7 +61,7 @@ export function useAnchoredPopover(align: 'left' | 'right', width: number) {
   const [anchor, setAnchor] = useState<PopoverAnchor | null>(null);
   const open = () =>
     ref.current?.measureInWindow((x, y, w, h) =>
-      setAnchor({ top: y + h + 4, left: align === 'left' ? x : x + w - width }),
+      setAnchor({ top: y + h + 4, above: y, left: align === 'left' ? x : x + w - width }),
     );
   return { ref: ref as RefObject<View>, anchor, open, close: () => setAnchor(null) };
 }
@@ -101,4 +118,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: sizes.controlSm, paddingHorizontal: spacing.md },
   label: { flex: 1, fontSize: 14 },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.xs },
+  // Laid out once, unseen, to learn its height before it's placed.
+  measuring: { opacity: 0 },
 });

@@ -33,3 +33,33 @@ export function valueCaption(goal: Goal): string {
   if (goal.type === 'daily') return `of ${target} today`;
   return `of ${target}`;
 }
+
+// A goal's logged sets, one group per day, newest day first; each day's sets in the
+// order they were done. For the History list on Goals.
+export function setHistory(state: CoachState, goalId: string): { date: string; sets: LogEntry[] }[] {
+  const byDay = new Map<string, LogEntry[]>();
+  for (const entry of state.entries) {
+    if (entry.goalId !== goalId) continue;
+    const list = byDay.get(entry.date) ?? [];
+    list.push(entry);
+    byDay.set(entry.date, list);
+  }
+  return [...byDay.entries()]
+    .sort(([a], [b]) => (a < b ? 1 : a > b ? -1 : 0))
+    .map(([date, sets]) => ({ date, sets: sets.sort((a, b) => a.loggedAt - b.loggedAt) }));
+}
+
+// The biggest set logged for a goal, or 0 with none.
+export function bestLoggedSet(state: CoachState, goalId: string): number {
+  return state.entries.reduce((best, e) => (e.goalId === goalId && e.value > best ? e.value : best), 0);
+}
+
+// The set a record goal's number comes from: the earliest one of that size. Null if
+// none matches (a record from before sets were logged, or one that no longer has a
+// set behind it).
+export function recordSet(goal: Goal, state: CoachState): LogEntry | null {
+  if (goal.type !== 'best' || goal.current <= 0) return null;
+  const matching = state.entries.filter((e) => e.goalId === goal.id && e.value === goal.current);
+  if (matching.length === 0) return null;
+  return matching.reduce((a, b) => (b.date < a.date || (b.date === a.date && b.loggedAt < a.loggedAt) ? b : a));
+}

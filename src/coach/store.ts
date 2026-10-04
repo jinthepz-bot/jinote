@@ -345,6 +345,19 @@ function floorWithout(goal: Goal, entry: LogEntry): number {
   return goal.type === 'best' && entry.value >= goal.current ? 0 : goal.current;
 }
 
+// A record goal whose number is higher than any logged set (from before sets were
+// logged, or a set that's gone): sets it to the best logged set. Returns the number
+// it had, or null if there was nothing to change.
+export function resetRecordToSets(goalId: string): number | null {
+  const state = store.get();
+  const goal = state.goals.find((g) => g.id === goalId);
+  if (!goal || goal.type !== 'best') return null;
+  const current = recomputeCurrent(goal, state.entries, 0);
+  if (current === goal.current) return null;
+  store.set({ ...state, goals: state.goals.map((g) => (g.id === goalId ? { ...g, current } : g)) });
+  return goal.current;
+}
+
 // Changes one logged set's size. Returns the set as it was and the goal's number
 // before, for Undo.
 export function updateEntry(entryId: string, value: number): { before: LogEntry; previousCurrent: number } | null {

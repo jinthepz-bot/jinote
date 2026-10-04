@@ -1,6 +1,6 @@
 import { addDays, formatDayKey } from '../coach/days';
 import { formatAmount } from '../coach/format';
-import { dayTotal, GOAL_TYPE_LABELS, goalValue, setsOn } from '../coach/progress';
+import { bestLoggedSet, dayTotal, GOAL_TYPE_LABELS, goalValue, recordSet, setsOn } from '../coach/progress';
 import { currentStreak, deadlineStatus, goalProgress } from '../coach/stats';
 import { entriesForGoal, getFeaturedGoal, type CoachState, type Goal, type LogEntry } from '../coach/store';
 import { formatTime } from '../coach/days';
@@ -55,6 +55,20 @@ function describeLoggedToday(goal: Goal, sets: LogEntry[]): string {
   return `  Today: ${sets.length} ${sets.length === 1 ? 'set' : 'sets'} for "${goal.title}" — ${list}; today's total ${formatAmount(dayTotal(sets))}${unit}.`;
 }
 
+// Where a record goal's number comes from, with the set's id: "delete the 90 set"
+// usually means the record's own set, which is often from an earlier day. Other past
+// sets are found with find_sets.
+function describeRecord(goal: Goal, state: CoachState, todayKey: string): string | null {
+  if (goal.type !== 'best' || goal.current <= 0) return null;
+  const unit = goal.unit ? ` ${goal.unit}` : '';
+  const set = recordSet(goal, state);
+  if (!set) {
+    return `  Record ${formatAmount(goal.current)}${unit}: no logged set of that size (best logged set ${formatAmount(bestLoggedSet(state, goal.id))}${unit}).`;
+  }
+  const time = set.loggedAt > 0 ? ` at ${formatTime(set.loggedAt)}` : '';
+  return `  Record set: ${formatAmount(set.value)}${unit} on ${formatDayKey(set.date, todayKey)} (${set.date})${time} (set id: ${set.id}).`;
+}
+
 function describeTask(task: { id: string; text: string; date: string | null; time: string | null }, todayKey: string): string {
   const when = task.date ? `, due ${formatDayKey(task.date, todayKey)}${task.time ? ` ${task.time}` : ''}` : '';
   return `- "${truncate(task.text, 100)}" (id: ${task.id})${when}`;
@@ -95,6 +109,7 @@ export function buildCoachContext(state: CoachState, notes: Note[], schedule: Sc
     '',
     'FEATURED GOAL (drives the Home screen):',
     describeGoal(featured, state, todayKey),
+    ...[describeRecord(featured, state, todayKey)].filter((l): l is string => l !== null),
     describeLoggedToday(featured, setsOn(state, featured.id, todayKey)),
     `  Streak: ${streak} ${streak === 1 ? 'day' : 'days'} in a row with at least one set.`,
   ];
@@ -110,6 +125,8 @@ export function buildCoachContext(state: CoachState, notes: Note[], schedule: Sc
   lines.push('', `OTHER GOALS (${others.length}):`);
   for (const g of others) {
     lines.push(describeGoal(g, state, todayKey));
+    const record = describeRecord(g, state, todayKey);
+    if (record) lines.push(record);
     const sets = setsOn(state, g.id, todayKey);
     if (sets.length > 0) lines.push(describeLoggedToday(g, sets));
   }

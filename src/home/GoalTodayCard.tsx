@@ -1,22 +1,22 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View, type TextStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formatDayKey, formatTime } from '../coach/days';
-import { formatAmount, parseAmount, sanitizeAmountInput } from '../coach/format';
+import { formatAmount } from '../coach/format';
 import { dayTotal, goalValue, setsOn, valueCaption } from '../coach/progress';
 import { deadlineStatus, goalProgress } from '../coach/stats';
-import { deleteEntry, updateEntry, type CoachState, type Goal, type LogEntry } from '../coach/store';
+import type { CoachState, Goal, LogEntry } from '../coach/store';
 import { useAccent } from '../design/accent';
 import { useType } from '../design/fonts';
-import { hoverDim, hoverFill } from '../design/hover';
+import { hoverFill } from '../design/hover';
 import { Popover, type PopoverAnchor } from '../design/Popover';
-import { colors, keyboardAppearance, radius, rgba, sizes, spacing } from '../design/theme';
+import { SetEditor } from '../goals/SetEditor';
+import { colors, rgba, spacing } from '../design/theme';
 import { Card } from '../design/ui';
 
 const PB_SHOW_MS = 4000;
 const EDITOR_WIDTH = 220;
-const noOutline = { outlineStyle: 'none', outlineWidth: 0 } as unknown as TextStyle;
 
 // The featured goal on Today, in two halves:
 // - left, the goal itself: for a record goal the best single set ("30 of 100 in one
@@ -142,7 +142,7 @@ function SetChip({ set, unit }: { set: LogEntry; unit: string }) {
   const ref = useRef<View>(null);
   const [anchor, setAnchor] = useState<PopoverAnchor | null>(null);
   const time = set.loggedAt > 0 ? formatTime(set.loggedAt) : null;
-  const open = () => ref.current?.measureInWindow((x, y, _w, h) => setAnchor({ top: y + h + 4, left: x }));
+  const open = () => ref.current?.measureInWindow((x, y, _w, h) => setAnchor({ top: y + h + 4, above: y, left: x }));
 
   return (
     <View ref={ref} collapsable={false}>
@@ -157,66 +157,10 @@ function SetChip({ set, unit }: { set: LogEntry; unit: string }) {
         <Text style={[type.bodyStrong, styles.chipValue]}>{formatAmount(set.value)}</Text>
       </Pressable>
       <Popover anchor={anchor} width={EDITOR_WIDTH} onClose={() => setAnchor(null)}>
-        {anchor ? <SetEditor set={set} unit={unit} time={time} onDone={() => setAnchor(null)} /> : null}
+        {anchor ? (
+          <SetEditor set={set} unit={unit} title={time ? `Set at ${time}` : 'Set'} onDone={() => setAnchor(null)} />
+        ) : null}
       </Popover>
-    </View>
-  );
-}
-
-function SetEditor({ set, unit, time, onDone }: { set: LogEntry; unit: string; time: string | null; onDone: () => void }) {
-  const type = useType();
-  const accent = useAccent();
-  const [text, setText] = useState(formatAmount(set.value));
-  const value = parseAmount(text);
-  const canSave = value !== null && value > 0;
-
-  const save = () => {
-    if (!canSave) return;
-    if (value !== set.value) updateEntry(set.id, value);
-    onDone();
-  };
-
-  return (
-    <View style={styles.editor}>
-      <Text style={[type.bodyStrong, styles.editorTitle]}>{time ? `Set at ${time}` : 'Set'}</Text>
-      <View style={styles.editorRow}>
-        <TextInput
-          style={[type.number, styles.editorInput, noOutline]}
-          value={text}
-          onChangeText={(t) => setText(sanitizeAmountInput(t))}
-          keyboardType="decimal-pad"
-          keyboardAppearance={keyboardAppearance}
-          autoFocus
-          selectTextOnFocus
-          onSubmitEditing={save}
-          accessibilityLabel="Set size"
-        />
-        {unit ? <Text style={[type.body, styles.muted]}>{unit}</Text> : null}
-      </View>
-      <View style={styles.editorActions}>
-        <Pressable
-          onPress={() => {
-            deleteEntry(set.id);
-            onDone();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Delete this set"
-          style={(s) => [styles.editorButton, hoverFill(s)]}
-        >
-          <Ionicons name="trash-outline" size={15} color={colors.deadlineRed} />
-          <Text style={[type.bodyStrong, styles.deleteText]}>Delete</Text>
-        </Pressable>
-        <View style={styles.flex} />
-        <Pressable
-          onPress={save}
-          disabled={!canSave}
-          accessibilityRole="button"
-          accessibilityLabel="Save set"
-          style={(s) => [styles.editorButton, { backgroundColor: accent.accent }, !canSave && styles.disabled, canSave && hoverDim(s)]}
-        >
-          <Text style={[type.bodyStrong, { color: accent.onAccent }]}>Save</Text>
-        </Pressable>
-      </View>
     </View>
   );
 }
@@ -257,30 +201,4 @@ const styles = StyleSheet.create({
   chipTime: { fontSize: 12 },
   chipDot: { fontSize: 12, color: colors.textMuted },
   chipValue: { fontSize: 14 },
-  editor: { padding: spacing.md, gap: spacing.sm },
-  editorTitle: { fontSize: 14 },
-  editorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  editorInput: {
-    flex: 1,
-    minWidth: 0,
-    height: sizes.control,
-    fontSize: 22,
-    paddingHorizontal: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.control,
-    backgroundColor: colors.background,
-    color: colors.text,
-  },
-  editorActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  editorButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    height: sizes.controlSm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.control,
-  },
-  deleteText: { fontSize: 14, color: colors.deadlineRed },
-  disabled: { opacity: 0.45 },
 });
