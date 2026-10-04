@@ -32,11 +32,15 @@ jobs:
 
       - name: Build web app
         run: npm run build:web
-        # Cloud sync (optional): the Supabase project URL and its *publishable* key,
-        # stored as repository secrets so they stay out of git. Both are public by
-        # design once the site is built; Row Level Security protects the data.
-        # Never add the secret key here.
+        # Repository secrets, so the values stay out of git. EXPO_PUBLIC_* values are
+        # compiled into the site's JavaScript, so each one is readable by anyone who
+        # opens the site:
+        # - the Gemini key turns the coach on (without it the coach runs in MOCK mode);
+        #   restrict it to this site's address in Google Cloud so a copy is useless elsewhere;
+        # - the Supabase URL and *publishable* key turn cloud sync on; they're public by
+        #   design, and Row Level Security protects the data. Never add the secret key.
         env:
+          EXPO_PUBLIC_GEMINI_API_KEY: ${{ secrets.EXPO_PUBLIC_GEMINI_API_KEY }}
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
 
